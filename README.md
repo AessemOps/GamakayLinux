@@ -5,10 +5,11 @@ the **GamaKay LK67**. It configures the keyboard over USB, the 2.4 GHz dongle
 and Bluetooth with no resident process: every setting is written to the
 keyboard's own memory and the program exits.
 
-> Status: **Phase 3** — `list` / `info`, lighting (`light`, `apply`) and the
-> base-layer keymap (`keymap get|set|reset`, keymap profiles) are implemented
-> and verified on hardware. Macros land in Phase 4, the iced GUI in Phase 5.
-> See `.kilo/plans/1792003709046-gamakay-linux-rust-app.md`.
+> Status: **Phase 4** — `list` / `info`, lighting, the base-layer keymap, and
+> macros are implemented. Lighting and keymap are verified on hardware; macro
+> writes are implemented but **unverified** on the LK67 (they do not read back)
+> and are gated behind `--force`. The iced GUI is Phase 5. See
+> `.kilo/plans/1792003709046-gamakay-linux-rust-app.md`.
 
 ## Why
 
@@ -67,6 +68,10 @@ gamakay keymap get                                   # list the base layer
 gamakay keymap set --key CapsLock --to Esc           # remap by name
 gamakay keymap set --slot 3 --to none                # clear a slot
 gamakay keymap reset --yes                           # factory reset (whole board)
+
+gamakay macro list                                   # onboard macros
+gamakay macro set 0 --repeat 1 --steps "A+@20, A-@20"
+gamakay keymap set --slot 20 --to macro:0            # bind macro 0 to a key
 ```
 
 A profile is TOML; unspecified fields keep their current value:
@@ -98,6 +103,10 @@ memory, and `gamakay` pauses before the next command so the settings endpoint
 stays healthy. Verify a write with a following `gamakay light`. If a write is
 interrupted and the endpoint stalls, unplug and replug the keyboard (typing is
 never affected). See `docs/protocol.md`.
+
+Macro **writes** are the exception: they do not read back on the LK67 yet, so
+`gamakay macro set|delete` refuse unless `--force` is given. Binding a macro to
+a key (`keymap set --to macro:N`) is verified.
 
 ### Permissions
 

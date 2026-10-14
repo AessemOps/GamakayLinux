@@ -188,7 +188,7 @@ disabled rather than guessed.
 | info / options / debounce | yes **[HW]** | ? | ? |
 | lighting | yes **[HW]** | ? | ? |
 | keymap | yes **[HW]** | ? | ? |
-| macros | yes (Phase 4) | ? | ? |
+| macros | write unverified **[HW]** | ? | ? |
 | battery | — (no command; receiver status only) | ? | ? |
 
 ## Phase 1 hardware findings (LK67, USB cable)
@@ -257,6 +257,24 @@ committed fixtures are the real captures.
 - Writes use the same fire-and-forget + commit-pause flow as lighting; a
   multi-page write spaces its pages (`PAGE_GAP_MS`) and takes one commit pause
   at the end.
+
+## Phase 4 hardware findings (macros, USB cable)
+
+- **Macro writes do not read back** on the LK67. Writing `0x16` (all four
+  pages, `last` on the final page; and also the non-zero-prefix variant) is
+  accepted but `GET 0x8B` returns all zeros afterwards, so the write is
+  **unverified**. `gamakay macro set|delete` therefore refuse without
+  `--force`.
+- **Macro reads return zeros** (`0x8B [slot, page]`), so `gamakay macro list`
+  reports every slot empty. Whether this is "no macro stored" or "read
+  unsupported" is not established without a vendor capture.
+- **Binding works:** a keymap slot value `[0x09, mode, index, 0]` writes and
+  reads back through the working bulk keymap upload, so
+  `gamakay keymap set --slot N --to macro:INDEX` is verified even though the
+  macro body is not.
+- **Open item:** capture the vendor app's macro write to find the correct
+  opcode/flow (the reference's `0x16` shape does not stick here), then lift
+  the `--force` gate.
 
 ## Provenance
 

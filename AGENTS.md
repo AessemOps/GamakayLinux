@@ -65,6 +65,7 @@ gamakay light set --mode wave --color ff0000 --brightness 3 --speed 2
 gamakay apply ~/.config/gamakay/profiles/<name>.toml
 gamakay keymap get               # dump the base layer
 gamakay keymap set --key CapsLock --to Esc
+gamakay macro list               # onboard macros (read)
 ```
 
 ## Workflow
