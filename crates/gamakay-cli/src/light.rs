@@ -1,0 +1,256 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//! `gamakay light`: read and set the backlight and edge light.
+
+use anyhow::{Context, Result, bail};
+use clap::{Args, Subcommand};
+
+use gamakay_core::guard::Guard;
+use gamakay_core::light::{EdgeMode, LK67_FLAGS, LedParam, LedState, Mode};
+use gamakay_core::transport::Session;
+use gamakay_hidraw::HidrawDevice;
+
+use crate::{Cli, select_device};
+
+#[derive(Subcommand)]
+pub enum LightCmd {
+    /// Show the current backlight and edge light.
+    Get,
+    /// Set the backlight.
+    Set(LightArgs),
+    /// The edge (side) light.
+    Edge {
+        #[command(subcommand)]
+        action: EdgeCmd,
+    },
+    /// Turn the backlight on (clear the options bit).
+    On,
+    /// Turn the backlight off (set the options bit; not a black write).
+    Off,
+}
+
+#[derive(Subcommand)]
+pub enum EdgeCmd {
+    /// Show the current edge light.
+    Get,
+    /// Set the edge light.
+    Set(LightArgs),
+}
+
+#[derive(Args, Clone, Debug, Default)]
+pub struct LightArgs {
+    /// Mode name (e.g. static, wave, spectrum) or wire number.
+    #[arg(long)]
+    pub mode: Option<String>,
+    /// Colour as `#RRGGBB` or `RRGGBB`.
+    #[arg(long, value_parser = parse_color)]
+    pub color: Option<[u8; 3]>,
+    /// Brightness, 0..5 (the LK67 reports up to 5).
+    #[arg(long)]
+    pub brightness: Option<u8>,
+    /// Speed, 0..4 (0 slowest). Inverted on the wire for the backlight.
+    #[arg(long)]
+    pub speed: Option<u8>,
+    /// Direction / effect option, 0..3 for modes that use one.
+    #[arg(long)]
+    pub direction: Option<u8>,
+    /// Use the rainbow flag instead of a fixed colour.
+    #[arg(long, conflicts_with = "fixed")]
+    pub rainbow: bool,
+    /// Use a fixed colour (the default).
+    #[arg(long)]
+    pub fixed: bool,
+}
+
+pub fn parse_color(s: &str) -> Result<[u8; 3], String> {
+    let t = s.trim().trim_start_matches('#');
+    if t.len() != 6 {
+        return Err(format!("colour must be 6 hex digits, got {s:?}"));
+    }
+    let b =
+        |i: usize| u8::from_str_radix(&t[i..i + 2], 16).map_err(|_| format!("bad colour {s:?}"));
+    Ok([b(0)?, b(2)?, b(4)?])
+}
+
+pub fn run(cli: &Cli, action: Option<&LightCmd>) -> Result<()> {
+    match action {
+        None | Some(LightCmd::Get) => show(cli),
+        Some(LightCmd::Set(args)) => set_backlight(cli, args),
+        Some(LightCmd::Edge { action }) => match action {
+            EdgeCmd::Get => show(cli),
+            EdgeCmd::Set(args) => set_edge(cli, args),
+        },
+        Some(LightCmd::On) => toggle_backlight(cli, false),
+        Some(LightCmd::Off) => toggle_backlight(cli, true),
+    }
+}
+
+fn show(cli: &Cli) -> Result<()> {
+    let info = select_device(cli)?;
+    let mut dev = HidrawDevice::open(&info.path)?;
+    let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
+    let led = s.led_param().context("reading backlight (0x87)")?;
+    print_state("backlight", &led);
+    if board_has_edge(&mut s) {
+        match s.edge_param() {
+            Ok(e) => print_state("edge", &e),
+            Err(_) => println!("edge:       (unreadable)"),
+        }
+    } else {
+        println!("edge:       (none on this board)");
+    }
+    Ok(())
+}
+
+/// Presence of an edge light is a property of the board, not of a GET reply:
+/// the firmware answers `0x88` even when no edge LEDs are fitted.
+fn board_has_edge(s: &mut Session<'_>) -> bool {
+    s.device_id()
+        .ok()
+        .and_then(gamakay_core::device::by_id)
+        .map(|r| r.side_light)
+        .unwrap_or(false)
+}
+
+fn set_backlight(cli: &Cli, args: &LightArgs) -> Result<()> {
+    let info = select_device(cli)?;
+    let mut dev = HidrawDevice::open(&info.path)?;
+    let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
+    let cur = s.led_param()?;
+    let p = merge(&cur, args, false)?;
+    s.set_backlight(&p, LK67_FLAGS)?;
+    if cli.dry_run {
+        for pkt in s.withheld() {
+            print_plan(pkt);
+        }
+    } else {
+        print_param("backlight", &p, false);
+    }
+    Ok(())
+}
+
+fn set_edge(cli: &Cli, args: &LightArgs) -> Result<()> {
+    let info = select_device(cli)?;
+    let mut dev = HidrawDevice::open(&info.path)?;
+    let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
+    if !board_has_edge(&mut s) && !cli.force {
+        bail!("this board has no edge light (pass --force to try anyway)");
+    }
+    let cur = s.edge_param()?;
+    let p = merge(&cur, args, true)?;
+    s.set_edge(&p, LK67_FLAGS)?;
+    if cli.dry_run {
+        for pkt in s.withheld() {
+            print_plan(pkt);
+        }
+    } else {
+        print_param("edge", &p, true);
+    }
+    Ok(())
+}
+
+fn toggle_backlight(cli: &Cli, off: bool) -> Result<()> {
+    let info = select_device(cli)?;
+    let mut dev = HidrawDevice::open(&info.path)?;
+    let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
+    let o = s.set_backlight_off(off)?;
+    if cli.dry_run {
+        for pkt in s.withheld() {
+            print_plan(pkt);
+        }
+    } else {
+        println!("backlight:  {}", if o.backlight_off { "off" } else { "on" });
+    }
+    Ok(())
+}
+
+/// Merge the requested fields over the current state; unspecified fields keep
+/// their current value.
+pub(crate) fn merge(cur: &LedState, args: &LightArgs, edge: bool) -> Result<LedParam> {
+    let mode = match &args.mode {
+        Some(m) => resolve_mode(m, edge)?,
+        None => cur.mode,
+    };
+    if let Some(b) = args.brightness
+        && b > 5
+    {
+        bail!("brightness {b} is out of range (0..5)");
+    }
+    if let Some(sp) = args.speed
+        && sp > 4
+    {
+        bail!("speed {sp} is out of range (0..4)");
+    }
+    if let Some(d) = args.direction
+        && d > 3
+    {
+        bail!("direction {d} is out of range (0..3)");
+    }
+    Ok(LedParam {
+        mode,
+        speed: args.speed.unwrap_or(cur.speed),
+        brightness: args.brightness.unwrap_or(cur.brightness),
+        option: args.direction.unwrap_or(cur.option),
+        rainbow: if args.rainbow {
+            true
+        } else if args.fixed {
+            false
+        } else {
+            cur.flags == LK67_FLAGS.rainbow
+        },
+        rgb: args.color.unwrap_or(cur.rgb),
+    })
+}
+
+fn resolve_mode(s: &str, edge: bool) -> Result<u8> {
+    if let Some(m) = if edge {
+        EdgeMode::from_name(s).map(EdgeMode::code)
+    } else {
+        Mode::from_name(s).map(Mode::code)
+    } {
+        return Ok(m);
+    }
+    if let Ok(n) = s.trim().parse::<u8>() {
+        return Ok(n);
+    }
+    if edge {
+        bail!("unknown edge mode {s:?} (try: off, static, breathing, neon, wave, snake)")
+    }
+    bail!("unknown mode {s:?} (try: static, wave, spectrum, breathing, ripple, ...)")
+}
+
+/// The requested state, printed because a write cannot be read back in the
+/// same exchange (see `docs/protocol.md`).
+pub(crate) fn print_param(label: &str, p: &LedParam, edge: bool) {
+    let name = if edge {
+        EdgeMode::from_code(p.mode).map(EdgeMode::name)
+    } else {
+        Mode::from_code(p.mode).map(Mode::name)
+    }
+    .map(str::to_string)
+    .unwrap_or_else(|| format!("mode-{}", p.mode));
+    let kind = if p.rainbow { "rainbow" } else { "fixed" };
+    println!(
+        "{label}: {name:<10} speed {} brightness {} {kind} #{:02x}{:02x}{:02x} (sent)",
+        p.speed, p.brightness, p.rgb[0], p.rgb[1], p.rgb[2]
+    );
+}
+
+pub(crate) fn print_state(label: &str, s: &LedState) {
+    let color = format!("#{:02x}{:02x}{:02x}", s.rgb[0], s.rgb[1], s.rgb[2]);
+    let kind = match s.preset {
+        Some(p) => format!("preset {p}"),
+        None => format!("flags {}", s.flags),
+    };
+    println!(
+        "{label}: {:<10} speed {} brightness {} {} {color}",
+        s.mode_name(),
+        s.speed,
+        s.brightness,
+        kind,
+    );
+}
+
+pub(crate) fn print_plan(pkt: &[u8; 64]) {
+    let hex: Vec<String> = pkt.iter().take(16).map(|b| format!("{b:02x}")).collect();
+    println!("dry run: {}", hex.join(" "));
+}

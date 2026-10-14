@@ -60,6 +60,9 @@ and needs none:
 gamakay list                     # enumerate nodes, marks the settings node
 gamakay info                     # identify + read current settings
 gamakay --device /dev/hidraw0 info
+gamakay light                    # show backlight (and edge light)
+gamakay light set --mode wave --color ff0000 --brightness 3 --speed 2
+gamakay apply ~/.config/gamakay/profiles/<name>.toml
 ```
 
 ## Workflow
@@ -85,9 +88,12 @@ gamakay --device /dev/hidraw0 info
 2. **A command may enter `ALLOWED` only after its write is capture- or
    read-back-confirmed** on hardware. No guessed packets.
 3. **Read-modify-write** for bitfields (options) so unmodelled bits survive.
-4. **Respect the write cadence.** Per-key colour uploads land in flash and can
-   stall the control endpoint; a stall needs USB re-enumeration. Space reports
-   (≥12 ms) and never loop uploads.
+4. **Respect the write flow.** A feature SET is fire-and-forget: do **not**
+   read a reply in the same exchange, and leave the commit pause
+   (`WRITE_COMMIT_MS`, ~1.5 s) before the next command, or the settings
+   endpoint stalls and needs USB re-enumeration (typing is unaffected).
+   Per-key colour uploads also land in flash; space reports and never loop
+   uploads. See "Writes (SET)" in `docs/protocol.md`.
 5. Wire the reset/recovery procedure in `docs/protocol.md` before exercising
    any new write path on hardware.
 

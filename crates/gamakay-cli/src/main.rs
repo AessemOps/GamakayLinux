@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! `gamakay`: configure a GamaKay keyboard from Linux over hidraw.
 //!
-//! Phase 1 surface: `list` and `info`, both read-only. Writing commands
-//! (lighting, keymap, macros) arrive in later phases and always go through the
-//! core safety guard.
+//! Read commands (`list`, `info`) and the Phase 2 lighting commands
+//! (`light`, `apply`). Every write goes through the core safety guard.
+
+mod light;
+mod profile;
 
 use std::path::PathBuf;
 
@@ -46,13 +48,25 @@ enum Command {
     List,
     /// Identify the attached board and read its current settings.
     Info,
+    /// Read or set the backlight and edge light.
+    Light {
+        #[command(subcommand)]
+        action: Option<light::LightCmd>,
+    },
+    /// Apply a TOML lighting profile (name or path).
+    Apply {
+        /// Profile name (looked up in ~/.config/gamakay/profiles) or a path.
+        profile: String,
+    },
 }
 
 fn main() {
     let cli = Cli::parse();
-    let result = match cli.command {
+    let result = match &cli.command {
         Command::List => cmd_list(),
         Command::Info => cmd_info(&cli),
+        Command::Light { action } => light::run(&cli, action.as_ref()),
+        Command::Apply { profile } => profile::run(&cli, profile),
     };
     if let Err(e) = result {
         let text = format!("{e:#}");
@@ -65,6 +79,11 @@ fn main() {
                 "  sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw"
             );
             eprintln!("then replug the keyboard. See docs/re-workflow.md.");
+        } else if text.contains("Protocol error") || text.contains("Connection timed out") {
+            eprintln!();
+            eprintln!("hint: the keyboard's settings endpoint has stalled. It does not recover");
+            eprintln!("on reopen: unplug and replug the keyboard (typing is unaffected).");
+            eprintln!("See \"Stalled endpoint\" in docs/protocol.md.");
         }
         std::process::exit(1);
     }
@@ -186,7 +205,7 @@ fn cmd_info(cli: &Cli) -> Result<()> {
 }
 
 /// The node to talk to: `--device`, else the auto-detected settings node.
-fn select_device(cli: &Cli) -> Result<HidrawInfo> {
+pub(crate) fn select_device(cli: &Cli) -> Result<HidrawInfo> {
     if let Some(path) = &cli.device {
         return gamakay_hidraw::find(path)
             .with_context(|| format!("no hidraw node at {}", path.display()));

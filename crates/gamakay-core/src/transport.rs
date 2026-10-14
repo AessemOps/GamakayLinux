@@ -43,7 +43,23 @@ pub struct Session<'a> {
     transport: &'a mut dyn Transport,
     guard: Guard,
     settle_ms: u64,
+    /// Gap inserted before a write. The firmware needs a pause after a read
+    /// reply before it will accept a feature SET; too small and the SET times
+    /// out and can stall the control endpoint. **[HW]**
+    write_gap_ms: u64,
+    /// Pause after a write. The board is busy committing the change and NAKs
+    /// any control transfer during that window; a transfer sent then times out
+    /// and stalls the endpoint until re-enumeration. Waiting here is what
+    /// keeps a following command (in this run or the next) healthy. **[HW]**
+    write_commit_ms: u64,
+    /// Packets a dry run withheld from the wire, in order.
+    withheld: Vec<[u8; REPORT_LEN]>,
 }
+
+/// Gap before a write, in milliseconds.
+pub const WRITE_GAP_MS: u64 = 20;
+/// Pause after a write, in milliseconds.
+pub const WRITE_COMMIT_MS: u64 = 1500;
 
 impl<'a> Session<'a> {
     pub fn new(transport: &'a mut dyn Transport, guard: Guard) -> Self {
@@ -51,6 +67,9 @@ impl<'a> Session<'a> {
             transport,
             guard,
             settle_ms: SETTLE_MS,
+            write_gap_ms: WRITE_GAP_MS,
+            write_commit_ms: WRITE_COMMIT_MS,
+            withheld: Vec::new(),
         }
     }
 
@@ -60,13 +79,39 @@ impl<'a> Session<'a> {
         self
     }
 
+    /// Override the post-write commit pause. Tests use 0.
+    pub fn with_write_commit(mut self, ms: u64) -> Self {
+        self.write_commit_ms = ms;
+        self
+    }
+
     pub fn guard(&self) -> Guard {
         self.guard
     }
 
+    /// Write packets a dry run withheld from the wire.
+    pub fn withheld(&self) -> &[[u8; REPORT_LEN]] {
+        &self.withheld
+    }
+
     /// Build through the guard, then hand the packet to the transport.
+    ///
+    /// Under `--dry-run` a *write* (opcode below `0x80`) is recorded instead
+    /// of sent; reads (`0x80..`) still travel so the command can report the
+    /// current state. A real write is followed by a commit pause so the next
+    /// command does not hit the busy window.
     pub fn send(&mut self, opcode: u8, payload: &[u8], mode: Checksum) -> Result<()> {
         let pkt = self.guard.build(opcode, payload, mode)?;
+        if opcode < 0x80 {
+            if self.guard.dry_run {
+                self.withheld.push(pkt);
+                return Ok(());
+            }
+            sleep(Duration::from_millis(self.write_gap_ms));
+            self.transport.send_feature(&pkt)?;
+            sleep(Duration::from_millis(self.write_commit_ms));
+            return Ok(());
+        }
         self.transport.send_feature(&pkt)
     }
 
@@ -219,5 +264,26 @@ mod tests {
             .roundtrip(cmd::GET_REVISION, &[], Checksum::Bit7)
             .unwrap_err();
         assert!(matches!(err, Error::NoReply { opcode: 0x80 }));
+    }
+
+    #[test]
+    fn dry_run_withholds_writes_but_sends_reads() {
+        let mut mock = MockTransport::new();
+        mock.expect_payload(cmd::GET_USB_VERSION, &[149, 0, 0, 0], Checksum::Bit7);
+        let mut session = Session::new(&mut mock, Guard::new(true)).with_settle(0);
+
+        // A write is recorded, not sent.
+        session
+            .send(cmd::SET_LEDPARAM, &[1, 1, 1, 7, 0, 0, 0], Checksum::Bit8)
+            .unwrap();
+        assert_eq!(session.withheld().len(), 1);
+        assert_eq!(session.withheld()[0][0], cmd::SET_LEDPARAM);
+
+        // A read still travels.
+        let reply = session
+            .roundtrip(cmd::GET_USB_VERSION, &[], Checksum::Bit7)
+            .unwrap();
+        assert_eq!(reply[0], cmd::GET_USB_VERSION);
+        assert_eq!(session.withheld().len(), 1);
     }
 }

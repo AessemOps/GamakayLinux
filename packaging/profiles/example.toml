@@ -1,0 +1,20 @@
+# Example gamakay lighting profile.
+# Copy to ~/.config/gamakay/profiles/<name>.toml and run `gamakay apply <name>`.
+# Unspecified fields keep their current value.
+
+[backlight]
+mode = "wave"        # static, breathing, spectrum, wave, ripple, star-dots,
+                     # flow, key-shadow, layers, sine, spring, neon, radiant,
+                     # loop, colour-grid, snowfall, meteor, silent-snow
+color = "#9507e1"
+brightness = 3       # 0..5 on the LK67
+speed = 2            # 0 slowest .. 4 fastest
+direction = 1        # for modes that use one
+rainbow = false      # false = fixed colour, true = rainbow
+
+# The [edge] section only applies to boards that have an edge light.
+# [edge]
+# mode = "static"    # off, static, breathing, neon, wave, snake
+# color = "#00ff00"
+# brightness = 2
+# speed = 1

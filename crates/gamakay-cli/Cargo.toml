@@ -17,3 +17,5 @@ gamakay-core.workspace = true
 gamakay-hidraw.workspace = true
 clap.workspace = true
 anyhow.workspace = true
+serde.workspace = true
+toml.workspace = true
