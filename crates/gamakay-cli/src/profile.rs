@@ -37,6 +37,9 @@ use crate::{Cli, select_device};
 struct Profile {
     backlight: Option<Section>,
     edge: Option<Section>,
+    /// Base-layer remaps: key is a slot number or a key name, value is the
+    /// binding to write (a key name, `0xNN`, or `none`).
+    keymap: Option<std::collections::BTreeMap<String, String>>,
 }
 
 #[derive(Deserialize, Debug, Default, Clone)]
@@ -73,8 +76,8 @@ pub fn run(cli: &Cli, profile_arg: &str) -> Result<()> {
         .with_context(|| format!("reading profile {}", path.display()))?;
     let profile: Profile =
         toml::from_str(&text).with_context(|| format!("parsing profile {}", path.display()))?;
-    if profile.backlight.is_none() && profile.edge.is_none() {
-        bail!("profile has no [backlight] or [edge] section");
+    if profile.backlight.is_none() && profile.edge.is_none() && profile.keymap.is_none() {
+        bail!("profile has no [backlight], [edge] or [keymap] section");
     }
     println!("applying {}", path.display());
 
@@ -107,6 +110,27 @@ pub fn run(cli: &Cli, profile_arg: &str) -> Result<()> {
             }
         } else {
             light::print_param("edge", &p, true);
+        }
+    }
+    if let Some(map) = &profile.keymap {
+        let profile_idx = s.profile().unwrap_or(0);
+        let mut layer = s.read_layer(profile_idx, false)?;
+        for (key, to) in map {
+            let slot = match key.trim().parse::<usize>() {
+                Ok(n) => n,
+                Err(_) => layer
+                    .find_by_name(key)
+                    .ok_or_else(|| anyhow::anyhow!("no key named {key:?} in the base layer"))?,
+            };
+            let value = crate::keymap::parse_bind(to)?;
+            layer.set(slot, gamakay_core::keymap::Slot::from_value(value));
+            println!("  keymap slot {slot} -> {to}");
+        }
+        s.write_layer(profile_idx, &layer, false)?;
+        if cli.dry_run {
+            for pkt in s.withheld() {
+                light::print_plan(pkt);
+            }
         }
     }
     Ok(())
