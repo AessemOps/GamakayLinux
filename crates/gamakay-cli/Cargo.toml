@@ -1,0 +1,19 @@
+[package]
+name = "gamakay-cli"
+description = "`gamakay` command-line tool for GamaKay keyboards"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "gamakay"
+path = "src/main.rs"
+
+[dependencies]
+gamakay-core.workspace = true
+gamakay-hidraw.workspace = true
+clap.workspace = true
+anyhow.workspace = true

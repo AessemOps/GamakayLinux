@@ -1,0 +1,18 @@
+# GamaKay LK67 — grant the active local user access to the settings hidraw
+# node without root, via systemd-logind's uaccess ACL.
+#
+# Install to /etc/udev/rules.d/70-gamakay.rules and run:
+#   sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
+# then replug the keyboard. `gamakay info` runs as your normal user.
+
+# Wired USB. The LK67 enumerates two interfaces; this matches the settings one
+# (usage page 1 / usage 6, the 64-byte vendor feature report).
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0461", ATTRS{idProduct}=="4002", TAG+="uaccess"
+
+# Bluetooth HOGP is surfaced through uhid under the adapter's USB ids, so match
+# the HID name instead. Wired and Bluetooth share the same product name.
+SUBSYSTEM=="hidraw", ATTRS{name}=="*GamaKay LK67 Keyboard*", TAG+="uaccess"
+
+# The 2.4 GHz receiver's VID/PID for the LK67 is not yet recorded (Phase 0
+# open item). Once known, add an idVendor/idProduct pair here; until then the
+# name match above covers a receiver that reports the product name.

@@ -1,0 +1,36 @@
+# Maintainer: GamakayLinux contributors
+# Arch/CachyOS package for GamakayLinux. The GUI is Phase 5 and not built yet;
+# this package ships the CLI and the udev rule.
+
+pkgname=gamakaylinux
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Configure the GamaKay LK67 keyboard from Linux (USB, 2.4 GHz, Bluetooth)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/AessemOps/GamakayLinux"
+license=('GPL-3.0-or-later')
+depends=()
+makedepends=('cargo' 'rust')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+prepare() {
+  cd "$pkgname-$pkgver"
+  cargo fetch --locked
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+  cargo build --frozen --release --locked
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  install -Dm755 target/release/gamakay "$pkgdir/usr/bin/gamakay"
+  install -Dm644 packaging/udev/70-gamakay.rules \
+    "$pkgdir/usr/lib/udev/rules.d/70-gamakay.rules"
+  install -Dm644 packaging/gamakay.desktop \
+    "$pkgdir/usr/share/applications/gamakay.desktop"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 CREDITS.md "$pkgdir/usr/share/licenses/$pkgname/CREDITS.md"
+}
