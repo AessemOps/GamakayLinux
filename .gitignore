@@ -1,0 +1,14 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Clean-room: the extracted vendor app and raw captures are never committed.
+/vendor/
+*.pcapng
+*.pcap
+*.cap
+captures/
+
+# Editor / OS
+.DS_Store
+*.swp
