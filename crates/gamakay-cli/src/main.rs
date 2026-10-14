@@ -4,6 +4,7 @@
 //! Read commands (`list`, `info`) and the Phase 2 lighting commands
 //! (`light`, `apply`). Every write goes through the core safety guard.
 
+mod keymap;
 mod light;
 mod profile;
 
@@ -58,6 +59,11 @@ enum Command {
         /// Profile name (looked up in ~/.config/gamakay/profiles) or a path.
         profile: String,
     },
+    /// Read, remap and reset the onboard key layers.
+    Keymap {
+        #[command(subcommand)]
+        action: keymap::KeymapCmd,
+    },
 }
 
 fn main() {
@@ -67,6 +73,7 @@ fn main() {
         Command::Info => cmd_info(&cli),
         Command::Light { action } => light::run(&cli, action.as_ref()),
         Command::Apply { profile } => profile::run(&cli, profile),
+        Command::Keymap { action } => keymap::run(&cli, action),
     };
     if let Err(e) = result {
         let text = format!("{e:#}");

@@ -60,6 +60,8 @@ pub struct Session<'a> {
 pub const WRITE_GAP_MS: u64 = 20;
 /// Pause after a write, in milliseconds.
 pub const WRITE_COMMIT_MS: u64 = 1500;
+/// Gap between pages of one multi-page write.
+pub const PAGE_GAP_MS: u64 = 40;
 
 impl<'a> Session<'a> {
     pub fn new(transport: &'a mut dyn Transport, guard: Guard) -> Self {
@@ -113,6 +115,34 @@ impl<'a> Session<'a> {
             return Ok(());
         }
         self.transport.send_feature(&pkt)
+    }
+
+    /// Send one page of a multi-page write. Pages are spaced by `PAGE_GAP_MS`
+    /// and only the last page takes the full commit pause, so a nine-page
+    /// layer upload does not take nine commit pauses. **[HW]**
+    pub fn send_page(
+        &mut self,
+        opcode: u8,
+        payload: &[u8],
+        mode: Checksum,
+        last: bool,
+    ) -> Result<()> {
+        let pkt = self.guard.build(opcode, payload, mode)?;
+        if self.guard.dry_run {
+            if opcode < 0x80 {
+                self.withheld.push(pkt);
+                return Ok(());
+            }
+        } else {
+            sleep(Duration::from_millis(self.write_gap_ms));
+            self.transport.send_feature(&pkt)?;
+            sleep(Duration::from_millis(if last {
+                self.write_commit_ms
+            } else {
+                PAGE_GAP_MS
+            }));
+        }
+        Ok(())
     }
 
     /// Read one report into `buf`.

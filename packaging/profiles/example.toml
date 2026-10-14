@@ -18,3 +18,11 @@ rainbow = false      # false = fixed colour, true = rainbow
 # color = "#00ff00"
 # brightness = 2
 # speed = 1
+
+# Base-layer remaps. The key is a slot number or a key name; the value is the
+# binding (a key name, 0xNN, or none to clear). On the LK67 the whole layer is
+# re-uploaded, so all entries are applied in one write.
+[keymap]
+CapsLock = "Esc"
+# "71" = "none"
+

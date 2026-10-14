@@ -5,10 +5,10 @@ the **GamaKay LK67**. It configures the keyboard over USB, the 2.4 GHz dongle
 and Bluetooth with no resident process: every setting is written to the
 keyboard's own memory and the program exits.
 
-> Status: **Phase 2** — `list` / `info` (read-only) and the lighting commands
-> (`light`, `apply`) are implemented and verified on hardware. Keymap and
-> macros land in Phases 3–4, the iced GUI in Phase 5. See
-> `.kilo/plans/1792003709046-gamakay-linux-rust-app.md`.
+> Status: **Phase 3** — `list` / `info`, lighting (`light`, `apply`) and the
+> base-layer keymap (`keymap get|set|reset`, keymap profiles) are implemented
+> and verified on hardware. Macros land in Phase 4, the iced GUI in Phase 5.
+> See `.kilo/plans/1792003709046-gamakay-linux-rust-app.md`.
 
 ## Why
 
@@ -62,6 +62,11 @@ gamakay light set --mode wave --color ff0000 --brightness 3 --speed 2 --directio
 gamakay light off                                    # options bit, not a black write
 gamakay light on
 gamakay apply ~/.config/gamakay/profiles/olivia.toml
+
+gamakay keymap get                                   # list the base layer
+gamakay keymap set --key CapsLock --to Esc           # remap by name
+gamakay keymap set --slot 3 --to none                # clear a slot
+gamakay keymap reset --yes                           # factory reset (whole board)
 ```
 
 A profile is TOML; unspecified fields keep their current value:
@@ -78,6 +83,10 @@ rainbow = false      # false = fixed colour
 [edge]
 mode = "static"      # only on boards that have an edge light
 color = "#00ff00"
+
+[keymap]             # base-layer remaps; key is a slot number or a key name
+CapsLock = "Esc"
+"71" = "none"
 ```
 
 `--dry-run` prints the packet a command would send and sends nothing.

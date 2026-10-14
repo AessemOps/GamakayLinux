@@ -187,7 +187,7 @@ disabled rather than guessed.
 | identify / revision | yes **[HW]** | ? | ? |
 | info / options / debounce | yes **[HW]** | ? | ? |
 | lighting | yes **[HW]** | ? | ? |
-| keymap | yes (Phase 3) | ? | ? |
+| keymap | yes **[HW]** | ? | ? |
 | macros | yes (Phase 4) | ? | ? |
 | battery | — (no command; receiver status only) | ? | ? |
 
@@ -234,6 +234,29 @@ committed fixtures are the real captures.
   read-modify-write; `on` clears it. Verified round-trip with the other
   options untouched.
 - **Write flow:** see "Writes (SET) — the flow matters" above.
+
+## Phase 3 hardware findings (keymap, USB cable)
+
+- **Base-layer read works:** `0x89 [profile, page]`, eight raw 64-byte pages.
+  The LK67's 67 keys land in a non-row-major matrix order (e.g. slot 9 = `A`,
+  slot 3 = CapsLock, slot 71 = Fn); the physical layout is therefore derived
+  from the layer itself (key name -> slot), not from a static table.
+- **Single-slot write `0x13` is ignored** on this unit: the write is accepted
+  but the slot does not change on read-back. Same for the Fn single write.
+- **Bulk layer write `0x09` works:** `[profile, 0xF8, 1, page]` + 56 bytes at
+  byte 8, nine pages, commit on page 8. Verified: read the layer, change one
+  slot (CapsLock -> Esc), upload, read back, restore. Slots 126..127 never
+  transmit (504 of 512 bytes), so they cannot be remapped.
+- **Fn layer read `0x90` echoes the request** (`90 00 <page> 00 …`) instead of
+  returning pages, so the Fn layer is not readable on this firmware and Fn
+  operations are withheld (`gamakay keymap --fn` refuses). **Open item:**
+  find the Fn read (another opcode, or a profile/sub-layer selector).
+- **Reset** is the factory reset `0x02`; it resets the whole keyboard, not one
+  layer, so `gamakay keymap reset` requires `--yes`. Not exercised on
+  hardware (destructive).
+- Writes use the same fire-and-forget + commit-pause flow as lighting; a
+  multi-page write spaces its pages (`PAGE_GAP_MS`) and takes one commit pause
+  at the end.
 
 ## Provenance
 
