@@ -58,6 +58,25 @@ payload it wrote into bytes 1..6. The one exception is `0x87`, whose RGB data
 runs through byte 7, so its byte 8 is 0 on GET. **[HW]** Do not validate GET
 reply checksums.
 
+### Writes (SET) — the flow matters **[HW]**
+
+A SET is applied, but the board then spends a moment committing the change
+(to flash), and during that window it NAKs the control endpoint. Any feature
+transfer sent in that window times out and leaves the endpoint **stalled**
+(`ioctl (SFEATURE): Protocol error`) until the board is re-enumerated. Two
+rules follow:
+
+1. **Fire-and-forget.** After a SET, do not read a reply in the same exchange.
+   A SET does answer with the applied state, but reading it back immediately is
+   exactly the transfer that stalls the pipe. The value is applied either way.
+2. **Commit pause.** Leave a gap (~1.5 s is safe) after a SET before the next
+   command, in this run or the next. `gamakay` sleeps this automatically
+   (`WRITE_COMMIT_MS`); a command run by hand right after a write should wait.
+
+Reads never stall, and a write is preceded by a small gap (`WRITE_GAP_MS`)
+because the firmware also dislikes a SET issued immediately after a read reply.
+
+
 
 ## Families
 
@@ -101,6 +120,8 @@ byte 4 power save. **Read-modify-write** so unmodelled bits survive.
 ```
 
 - yc500 wire speed is 1..5: the host's 0..4 is **inverted** (host 0 → 5).
+- Brightness is direct. It is 0..4 on most boards but **0..5 on the LK67**
+  (the unit reports 5). **[HW]**
 - Flags nibble: for the LK67 the default pair is `7` = fixed colour,
   `8` = rainbow. This is per board; confirm by read-back before trusting it.
 - White `0xFFFFFF` transmits as `0xFAFAFA`; any colour below `0x080808`
@@ -165,7 +186,7 @@ disabled rather than guessed.
 |---|---|---|---|
 | identify / revision | yes **[HW]** | ? | ? |
 | info / options / debounce | yes **[HW]** | ? | ? |
-| lighting | yes (Phase 2) | ? | ? |
+| lighting | yes **[HW]** | ? | ? |
 | keymap | yes (Phase 3) | ? | ? |
 | macros | yes (Phase 4) | ? | ? |
 | battery | — (no command; receiver status only) | ? | ? |
@@ -195,6 +216,24 @@ Phase 2, which also settles whether the 1..9 layout ever applies.
 **Reply checksum.** Confirmed on this board: no reply recompute (see
 Checksums). Our earlier synthetic fixtures had wrong reply checksums; the
 committed fixtures are the real captures.
+
+## Phase 2 hardware findings (lighting, USB cable)
+
+- **Backlight SET works** and persists across re-enumeration (the setting is
+  saved to onboard memory). Verified: set `wave #ff0000` brightness 3 speed 2
+  direction 1, read back in a separate process, then restored.
+- **Brightness range is 0..5** on the LK67 (the unit reports brightness 5),
+  wider than the documented 0..4. **[HW]**
+- **Speed** is the host scale 0..4; the wire value is `5 - host` for the
+  backlight and `host` for the edge light. The unit's original state was host
+  speed 1 (wire 4).
+- **Edge light:** the LK67 has none. `GET 0x88` still answers (a zero ack), so
+  presence comes from the device record, not the reply; `gamakay light edge`
+  is refused without `--force`.
+- **Off** is the options bit `0x10` (`SET 0x06`), applied with
+  read-modify-write; `on` clears it. Verified round-trip with the other
+  options untouched.
+- **Write flow:** see "Writes (SET) — the flow matters" above.
 
 ## Provenance
 

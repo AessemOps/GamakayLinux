@@ -5,9 +5,9 @@ the **GamaKay LK67**. It configures the keyboard over USB, the 2.4 GHz dongle
 and Bluetooth with no resident process: every setting is written to the
 keyboard's own memory and the program exits.
 
-> Status: **Phase 1** — the workspace, the hidraw transport and the read-only
-> `list` / `info` commands are implemented and tested. Lighting, keymap and
-> macros land in Phases 2–4, the iced GUI in Phase 5. See
+> Status: **Phase 2** — `list` / `info` (read-only) and the lighting commands
+> (`light`, `apply`) are implemented and verified on hardware. Keymap and
+> macros land in Phases 3–4, the iced GUI in Phase 5. See
 > `.kilo/plans/1792003709046-gamakay-linux-rust-app.md`.
 
 ## Why
@@ -49,13 +49,46 @@ cargo fmt --all --check
 
 `gamakay list` shows every hidraw node and marks the one carrying the 64-byte
 settings report. `gamakay info` identifies the board and reads its current
-settings.
+settings. `gamakay light` reads and sets the backlight, and `gamakay apply`
+applies a TOML profile.
 
 ```bash
 gamakay list
 gamakay info
 gamakay --device /dev/hidraw0 info
+
+gamakay light                                        # show backlight (and edge)
+gamakay light set --mode wave --color ff0000 --brightness 3 --speed 2 --direction 1
+gamakay light off                                    # options bit, not a black write
+gamakay light on
+gamakay apply ~/.config/gamakay/profiles/olivia.toml
 ```
+
+A profile is TOML; unspecified fields keep their current value:
+
+```toml
+[backlight]
+mode = "wave"        # static, breathing, spectrum, wave, ripple, ...
+color = "#9507e1"
+brightness = 3       # 0..5 on the LK67
+speed = 2            # 0 slowest .. 4 fastest
+direction = 1        # for modes that use one
+rainbow = false      # false = fixed colour
+
+[edge]
+mode = "static"      # only on boards that have an edge light
+color = "#00ff00"
+```
+
+`--dry-run` prints the packet a command would send and sends nothing.
+
+### Writing
+
+A write is **fire-and-forget**: the board applies it and commits it to onboard
+memory, and `gamakay` pauses before the next command so the settings endpoint
+stays healthy. Verify a write with a following `gamakay light`. If a write is
+interrupted and the endpoint stalls, unplug and replug the keyboard (typing is
+never affected). See `docs/protocol.md`.
 
 ### Permissions
 

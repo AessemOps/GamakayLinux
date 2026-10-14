@@ -48,6 +48,9 @@ pub struct DeviceRecord {
     pub support_onboard: u8,
     pub key_layout: &'static str,
     pub light_layout: &'static str,
+    /// Whether the board has an edge/side light. Presence comes from the
+    /// record, not from a GET reply (the firmware answers one anyway).
+    pub side_light: bool,
     pub keys: u16,
 }
 
@@ -68,6 +71,7 @@ pub const LK67: DeviceRecord = DeviceRecord {
     support_onboard: 2,
     key_layout: "LK67",
     light_layout: "LK67",
+    side_light: false,
     keys: 67,
 };
 
@@ -89,6 +93,7 @@ pub const YZ68: DeviceRecord = DeviceRecord {
     support_onboard: 2,
     key_layout: "Common68_RT68~k1",
     light_layout: "se",
+    side_light: false,
     keys: 68,
 };
 

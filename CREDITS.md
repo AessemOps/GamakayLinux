@@ -43,3 +43,5 @@ Bump the `Last reviewed` line above when any of these change.
 | `libc` | `libc` | MIT OR Apache-2.0 |
 | `clap` | `clap`, `clap_derive`, `clap_builder`, `clap_lex` | MIT OR Apache-2.0 |
 | `anyhow` | `anyhow` | MIT OR Apache-2.0 |
+| `serde` | `serde`, `serde_derive` | MIT OR Apache-2.0 |
+| `toml` | `toml`, `toml_edit`, `serde_spanned`, `toml_datetime`, `winnow` | MIT OR Apache-2.0 |

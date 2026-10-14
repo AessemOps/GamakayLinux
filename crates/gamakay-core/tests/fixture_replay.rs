@@ -68,7 +68,7 @@ fn identify_revision_and_settings_decode() {
 
     let led = session.led_param().unwrap();
     assert_eq!(led.mode, 1);
-    assert_eq!(led.speed, 4);
+    assert_eq!(led.speed, 1); // wire 4 -> host scale 1
     assert_eq!(led.brightness, 5);
     assert_eq!(led.option, 0);
     assert_eq!(led.flags, 7); // fixed colour

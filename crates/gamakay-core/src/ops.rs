@@ -16,41 +16,6 @@ pub fn parse_device_id(reply: &[u8]) -> Option<u32> {
     }
 }
 
-/// `0x87` LED parameters. Shared opcode; the checksum is Bit7 on GET.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct LedParam {
-    pub mode: u8,
-    /// Wire speed. For yc500 this is 1..5 (host 0..4 inverted).
-    pub speed: u8,
-    pub brightness: u8,
-    /// The option nibble (`(byte4 >> 4) & 0x0F`).
-    pub option: u8,
-    /// The flags nibble (`byte4 & 0x0F`): 7 fixed colour, 8 rainbow.
-    pub flags: u8,
-    pub rgb: [u8; 3],
-    /// On GET, flags 0..=6 are a firmware preset-colour index overriding RGB.
-    pub preset: Option<u8>,
-}
-
-impl LedParam {
-    pub fn from_reply(reply: &[u8]) -> Option<Self> {
-        if reply.len() < 9 || reply[0] != cmd::GET_LEDPARAM {
-            return None;
-        }
-        let option = (reply[4] >> 4) & 0x0F;
-        let flags = reply[4] & 0x0F;
-        Some(Self {
-            mode: reply[1],
-            speed: reply[2],
-            brightness: reply[3],
-            option,
-            flags,
-            rgb: [reply[5], reply[6], reply[7]],
-            preset: if flags <= 6 { Some(flags) } else { None },
-        })
-    }
-}
-
 /// `0x86` yc500 keyboard options bitfield. Read-modify-write to preserve the
 /// bits we do not model.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -169,10 +134,19 @@ impl Session<'_> {
     }
 
     /// `0x87`: LED parameters.
-    pub fn led_param(&mut self) -> Result<LedParam> {
+    pub fn led_param(&mut self) -> Result<crate::light::LedState> {
         let reply = self.roundtrip(cmd::GET_LEDPARAM, &[], Checksum::Bit7)?;
-        LedParam::from_reply(&reply).ok_or(Error::ShortReply {
+        crate::light::LedState::from_reply(&reply).ok_or(Error::ShortReply {
             opcode: cmd::GET_LEDPARAM,
+            len: reply.len(),
+        })
+    }
+
+    /// `0x88`: edge-light parameters.
+    pub fn edge_param(&mut self) -> Result<crate::light::LedState> {
+        let reply = self.roundtrip(cmd::GET_SLEDPARAM, &[], Checksum::Bit7)?;
+        crate::light::LedState::from_edge_reply(&reply).ok_or(Error::ShortReply {
+            opcode: cmd::GET_SLEDPARAM,
             len: reply.len(),
         })
     }
@@ -181,25 +155,6 @@ impl Session<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn led_param_decodes_nibbles() {
-        // LEDPARAM is a Bit8 packet: bytes 0..8 are op+payload, checksum at 8.
-        let reply = crate::packet::packet(
-            cmd::GET_LEDPARAM,
-            &[4, 3, 4, 0x87, 0xFF, 0x00, 0x00],
-            Checksum::Bit8,
-        )
-        .unwrap();
-        let led = LedParam::from_reply(&reply).unwrap();
-        assert_eq!(led.mode, 4);
-        assert_eq!(led.speed, 3);
-        assert_eq!(led.brightness, 4);
-        assert_eq!(led.option, 8);
-        assert_eq!(led.flags, 7);
-        assert_eq!(led.rgb, [0xFF, 0x00, 0x00]);
-        assert_eq!(led.preset, None);
-    }
 
     #[test]
     fn options_bitfield_maps() {
