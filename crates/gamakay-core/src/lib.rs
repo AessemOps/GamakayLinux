@@ -16,6 +16,7 @@ pub mod error;
 pub mod guard;
 pub mod keycode;
 pub mod keymap;
+pub mod layout;
 pub mod light;
 pub mod macros;
 pub mod model;

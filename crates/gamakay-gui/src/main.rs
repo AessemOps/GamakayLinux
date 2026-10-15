@@ -3,8 +3,10 @@
 //! UI only sends requests and reacts to events, so it never blocks and does no
 //! work while idle.
 
+mod canvas;
 mod worker;
 
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 use iced::futures::channel::mpsc::{UnboundedReceiver, unbounded};
@@ -74,6 +76,9 @@ struct App {
     // Keymap editor.
     fn_layer: bool,
     layer: Vec<(u8, String)>,
+    bindings: HashMap<u8, String>,
+    selected: Option<u8>,
+    preview: Option<(u8, String)>,
     slot_edit: String,
     // Macro editor.
     macros: Vec<(u8, String)>,
@@ -99,6 +104,7 @@ enum Message {
     ToggleFn(bool),
     SlotEdit(String),
     SlotApply,
+    SelectSlot(u8),
     MacroSlot(String),
     MacroSteps(String),
     MacroRepeat(String),
@@ -130,6 +136,9 @@ impl App {
             rainbow: false,
             fn_layer: false,
             layer: Vec::new(),
+            bindings: HashMap::new(),
+            selected: None,
+            preview: None,
             slot_edit: String::new(),
             macros: Vec::new(),
             macro_slot: "0".into(),
@@ -161,8 +170,22 @@ impl App {
                 self.fn_layer = v;
                 self.send(Request::Refresh);
             }
-            Message::SlotEdit(s) => self.slot_edit = s,
+            Message::SlotEdit(s) => {
+                self.preview = parse_preview(&s);
+                self.slot_edit = s;
+            }
             Message::SlotApply => self.apply_slot(),
+            Message::SelectSlot(slot) => {
+                self.selected = Some(slot);
+                let cur = self
+                    .layer
+                    .iter()
+                    .find(|(s, _)| *s == slot)
+                    .map(|(_, d)| d.clone())
+                    .unwrap_or_default();
+                self.slot_edit = format!("{slot}:{cur}");
+                self.preview = parse_preview(&self.slot_edit);
+            }
             Message::MacroSlot(s) => self.macro_slot = s,
             Message::MacroSteps(s) => self.macro_steps = s,
             Message::MacroRepeat(s) => self.macro_repeat = s,
@@ -190,6 +213,7 @@ impl App {
             Event::Backlight(s) => self.load_state(&s),
             Event::Layer { fn_layer, slots } => {
                 if fn_layer == self.fn_layer {
+                    self.bindings = slots.iter().cloned().collect();
                     self.layer = slots;
                 }
             }
@@ -325,7 +349,16 @@ impl App {
 
     fn view_lighting(&self) -> Element<'_, Message> {
         let on = self.connected;
+        let tint = parse_color(&self.color).map(|[r, g, b]| iced::Color::from_rgb8(r, g, b));
+        let preview = canvas::keyboard(canvas::Keyboard {
+            bindings: &self.bindings,
+            selected: None,
+            preview: None,
+            tint,
+        });
         let mut col = column![
+            text("Preview").size(16),
+            preview,
             row![
                 text("Mode"),
                 pick_list(self.modes.clone(), Some(self.mode.clone()), Message::Mode),
@@ -373,22 +406,34 @@ impl App {
     }
 
     fn view_keymap(&self) -> Element<'_, Message> {
-        let rows = self
-            .layer
-            .iter()
-            .map(|(slot, desc)| text(format!("slot {slot:>3}   {desc}")).into());
+        let kb = canvas::keyboard(canvas::Keyboard {
+            bindings: &self.bindings,
+            selected: self.selected,
+            preview: self.preview.clone(),
+            tint: None,
+        });
+        let list = self.layer.iter().map(|(slot, desc)| {
+            let mark = if self.selected == Some(*slot) {
+                ">"
+            } else {
+                " "
+            };
+            text(format!("{mark} slot {slot:>3}   {desc}")).into()
+        });
         column![
             row![
-                text("Fn layer"),
+                text("Layer"),
                 toggler(self.fn_layer).on_toggle(Message::ToggleFn)
             ]
             .spacing(8),
+            kb,
+            text("Click a key to select it, then rebind it below."),
             row![
                 text_input("slot:key (e.g. 3:Esc)", &self.slot_edit).on_input(Message::SlotEdit),
                 button(text("Apply")).on_press(Message::SlotApply),
             ]
             .spacing(8),
-            column(rows).spacing(2),
+            column(list).spacing(2),
         ]
         .spacing(10)
         .into()
@@ -433,6 +478,12 @@ fn event_stream() -> UnboundedReceiver<Event> {
         .unwrap()
         .take()
         .unwrap_or_else(|| unbounded().1)
+}
+
+fn parse_preview(s: &str) -> Option<(u8, String)> {
+    let (slot, key) = s.split_once(':')?;
+    let slot = slot.trim().parse::<u8>().ok()?;
+    Some((slot, key.trim().to_string()))
 }
 
 fn parse_color(s: &str) -> Option<[u8; 3]> {

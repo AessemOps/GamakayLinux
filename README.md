@@ -99,10 +99,14 @@ CapsLock = "Esc"
 
 ### GUI
 
-`gamakay-gui` is an iced 0.13 front-end over the same core: tabs for Info,
-Lighting, Keymap (base and Fn) and Macros. All device I/O runs on a worker
-thread, so the window never blocks; there are no idle timers or redraws.
-`gamakay-gui lighting` (or `keymap`/`macros`/`info`) opens on a given tab.
+`gamakay-gui` is an iced 0.13 front-end over the same core: a **keyboard
+canvas** drawn from the LK67 layout, with tabs for Info, Lighting, Keymap
+(base and Fn) and Macros. The canvas shows every key with its current binding;
+click a key to select it and the pending rebind is previewed on the key, and
+the Lighting tab previews the chosen colour across the whole board. All device
+I/O runs on a worker thread, so the window never blocks; there are no idle
+timers or redraws. `gamakay-gui lighting` (or `keymap`/`macros`/`info`) opens
+on a given tab.
 
 ```bash
 gamakay-gui              # opens on the Info tab
