@@ -412,11 +412,12 @@ impl App {
             selected: None,
             preview: None,
             lighting: Some(canvas::LightPreview {
-                color: tint,
-                rainbow: self.rainbow,
-                brightness: self.brightness,
                 mode: mode_code,
                 speed: self.speed,
+                brightness: self.brightness,
+                option: self.direction,
+                rainbow: self.rainbow,
+                rgb,
                 t: self.phase,
             }),
         });

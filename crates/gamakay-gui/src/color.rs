@@ -55,13 +55,3 @@ pub fn rgb_to_hs(rgb: [u8; 3]) -> (f32, f32) {
     let s = if max == 0.0 { 0.0 } else { d / max };
     (h.rem_euclid(360.0), s)
 }
-
-/// Scale a colour's brightness by `f`.
-pub fn scale(c: Color, f: f32) -> Color {
-    Color {
-        r: (c.r * f).clamp(0.0, 1.0),
-        g: (c.g * f).clamp(0.0, 1.0),
-        b: (c.b * f).clamp(0.0, 1.0),
-        a: c.a,
-    }
-}

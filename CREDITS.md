@@ -15,8 +15,11 @@ this file records what was used and how. `Last reviewed: 2026-10-14`.
 - How used: `docs/protocol.md` **[REF]** rows are derived from sharkfin's
   protocol document; the crate layout (`wire`/`protocol` separation, the
   checksum split, the receiver relay description) follows the same structure.
-  No sharkfin source file is copied verbatim; where a decode/encode routine is
-  adapted closely it carries a provenance header.
+  `crates/gamakay-gui/src/patterns.rs` is a port of sharkfin's
+  `app/src/lib/effects.ts` (its per-mode preview animations, whose timing
+  tables come from the firmware); the ported file carries the upstream
+  copyright header. No other sharkfin source file is copied verbatim; where a
+  decode/encode routine is adapted closely it carries a provenance header.
 - Reason GPL-compatible: sharkfin is GPL-3.0-or-later, as is this project.
 
 ### OpenRGB (LK67 fork)
