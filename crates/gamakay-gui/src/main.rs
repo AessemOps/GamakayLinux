@@ -4,6 +4,8 @@
 //! work while idle.
 
 mod canvas;
+mod color;
+mod colorwheel;
 mod worker;
 
 use std::collections::HashMap;
@@ -75,6 +77,8 @@ struct App {
     speed: u8,
     direction: u8,
     rainbow: bool,
+    /// Animation phase for the lighting preview.
+    phase: f32,
     // Keymap editor.
     fn_layer: bool,
     layer: Vec<(u8, String)>,
@@ -107,6 +111,8 @@ enum Message {
     SlotEdit(String),
     SlotApply,
     SelectSlot(u8),
+    PickColor(f32, f32),
+    Tick,
     MacroSlot(String),
     MacroSteps(String),
     MacroRepeat(String),
@@ -136,6 +142,7 @@ impl App {
             speed: 2,
             direction: 0,
             rainbow: false,
+            phase: 0.0,
             fn_layer: false,
             layer: Vec::new(),
             bindings: HashMap::new(),
@@ -177,6 +184,10 @@ impl App {
                 self.slot_edit = s;
             }
             Message::SlotApply => self.apply_slot(),
+            Message::PickColor(h, s) => {
+                self.color = color::to_hex(rgb8(color::hsv_to_rgb(h, s, 1.0)));
+            }
+            Message::Tick => self.phase += 0.12,
             Message::SelectSlot(slot) => {
                 self.selected = Some(slot);
                 let cur = self
@@ -238,7 +249,7 @@ impl App {
 
     fn apply_light(&mut self) {
         let mode = Mode::from_name(&self.mode).map(Mode::code).unwrap_or(1);
-        let rgb = parse_color(&self.color).unwrap_or([0xFF, 0x00, 0x00]);
+        let rgb = color::parse_hex(&self.color).unwrap_or([0xff, 0x00, 0x00]);
         let p = LedParam {
             mode,
             speed: self.speed,
@@ -292,8 +303,16 @@ impl App {
         self.send(Request::DeleteMacro(slot));
     }
 
-    fn subscription(_: &App) -> Subscription<Message> {
-        Subscription::run(event_stream).map(Message::Worker)
+    fn subscription(&self) -> Subscription<Message> {
+        let events = Subscription::run(event_stream).map(Message::Worker);
+        if self.tab == Tab::Lighting {
+            Subscription::batch([
+                events,
+                iced::time::every(std::time::Duration::from_millis(60)).map(|_| Message::Tick),
+            ])
+        } else {
+            events
+        }
     }
 
     fn theme(_: &App) -> Theme {
@@ -370,39 +389,54 @@ impl App {
     }
 
     fn view_lighting(&self) -> Element<'_, Message> {
-        let tint = parse_color(&self.color).map(|[r, g, b]| Color::from_rgb8(r, g, b));
-        let swatch = container(text(" "))
+        let rgb = color::parse_hex(&self.color).unwrap_or([0xff, 0x00, 0x00]);
+        let tint = Color::from_rgb8(rgb[0], rgb[1], rgb[2]);
+        let (hue, sat) = color::rgb_to_hs(rgb);
+        let mode_code = Mode::from_name(&self.mode).map(Mode::code).unwrap_or(1);
+        let swatch: Element<Message> = container(text(" "))
             .width(Length::Fixed(22.0))
             .height(Length::Fixed(22.0))
-            .style(move |_| container::Style {
-                background: Some(Background::Color(tint.unwrap_or(Color::BLACK))),
+            .style(move |_: &Theme| container::Style {
+                background: Some(Background::Color(tint)),
                 border: Border {
                     radius: 4.0.into(),
                     width: 1.0,
                     color: Color::from_rgb(0.4, 0.4, 0.45),
                 },
                 ..container::Style::default()
-            });
+            })
+            .into();
         let preview = canvas::keyboard(canvas::Keyboard {
             bindings: &self.bindings,
             selected: None,
             preview: None,
-            tint,
+            lighting: Some(canvas::LightPreview {
+                color: tint,
+                rainbow: self.rainbow,
+                brightness: self.brightness,
+                mode: mode_code,
+                phase: self.phase,
+            }),
         });
+        let colour_field: Element<Message> = row![
+            Element::from(colorwheel::wheel(colorwheel::ColorWheel::new(hue, sat))),
+            Element::from(
+                column![
+                    swatch,
+                    Element::from(text_input("#rrggbb", &self.color).on_input(Message::Color)),
+                    Element::from(text(format!("hue {hue:.0}°  sat {:.0}%", sat * 100.0)).size(12)),
+                ]
+                .spacing(10),
+            ),
+        ]
+        .spacing(16)
+        .into();
         let controls = column![
             labeled(
                 "Mode",
                 pick_list(self.modes.clone(), Some(self.mode.clone()), Message::Mode).into()
             ),
-            labeled(
-                "Colour",
-                row![
-                    Element::from(swatch),
-                    Element::from(text_input("#rrggbb", &self.color).on_input(Message::Color)),
-                ]
-                .spacing(8)
-                .into()
-            ),
+            labeled("Colour", colour_field),
             labeled(
                 "Brightness",
                 row![
@@ -447,7 +481,7 @@ impl App {
             bindings: &self.bindings,
             selected: self.selected,
             preview: self.preview.clone(),
-            tint: None,
+            lighting: None,
         });
         let editing = match self.selected {
             Some(slot) => format!("Editing slot {slot}"),
@@ -621,11 +655,11 @@ fn parse_preview(s: &str) -> Option<(u8, String)> {
     Some((slot, key.trim().to_string()))
 }
 
-fn parse_color(s: &str) -> Option<[u8; 3]> {
-    let t = s.trim().trim_start_matches('#');
-    if t.len() != 6 {
-        return None;
-    }
-    let b = |i: usize| u8::from_str_radix(&t[i..i + 2], 16).ok();
-    Some([b(0)?, b(2)?, b(4)?])
+/// Round an `iced::Color` (0..=1) to 8-bit RGB.
+fn rgb8(c: Color) -> [u8; 3] {
+    [
+        (c.r * 255.0).round() as u8,
+        (c.g * 255.0).round() as u8,
+        (c.b * 255.0).round() as u8,
+    ]
 }

@@ -1,0 +1,153 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//! A hue/saturation colour wheel: click or drag to pick a colour. The wheel
+//! itself is drawn once into a [`Cache`]; only the marker moves.
+
+use iced::widget::canvas::{self, Canvas, Frame, Geometry, Path, Program, Stroke, Style};
+use iced::{Color, Length, Point, Rectangle, Renderer, Theme, mouse};
+
+use crate::Message;
+use crate::color;
+
+const HUE_STEPS: usize = 60;
+const SAT_STEPS: usize = 14;
+const MARGIN: f32 = 6.0;
+
+/// The wheel, positioned at the current hue/saturation.
+pub struct ColorWheel {
+    pub hue: f32,
+    pub sat: f32,
+}
+
+impl ColorWheel {
+    pub fn new(hue: f32, sat: f32) -> Self {
+        Self { hue, sat }
+    }
+
+    fn radius(bounds: Rectangle) -> f32 {
+        (bounds.width.min(bounds.height) / 2.0 - MARGIN).max(1.0)
+    }
+
+    fn point(&self, bounds: Rectangle, hue: f32, sat: f32) -> Point {
+        let c = bounds.center();
+        let r = Self::radius(bounds) * sat;
+        let a = hue.to_radians();
+        Point::new(c.x + r * a.cos(), c.y + r * a.sin())
+    }
+
+    /// Hue/saturation under a canvas-local position.
+    fn hit(&self, pos: Point, bounds: Rectangle) -> (f32, f32) {
+        let c = bounds.center();
+        let dx = pos.x - c.x;
+        let dy = pos.y - c.y;
+        let hue = dy.atan2(dx).to_degrees().rem_euclid(360.0);
+        let sat = ((dx * dx + dy * dy).sqrt() / Self::radius(bounds)).clamp(0.0, 1.0);
+        (hue, sat)
+    }
+}
+
+/// A `Canvas` over the wheel.
+pub fn wheel(w: ColorWheel) -> Canvas<ColorWheel, Message> {
+    Canvas::new(w)
+        .width(Length::Fixed(190.0))
+        .height(Length::Fixed(190.0))
+}
+
+impl Program<Message> for ColorWheel {
+    type State = bool; // is the button held down?
+
+    fn update(
+        &self,
+        state: &mut Self::State,
+        event: canvas::Event,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+    ) -> (canvas::event::Status, Option<Message>) {
+        match event {
+            canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
+                if let Some(pos) = cursor.position_in(bounds) {
+                    *state = true;
+                    let (h, s) = self.hit(pos, bounds);
+                    return (
+                        canvas::event::Status::Captured,
+                        Some(Message::PickColor(h, s)),
+                    );
+                }
+            }
+            canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+                *state = false;
+            }
+            canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) if *state => {
+                if let Some(pos) = cursor.position_in(bounds) {
+                    let (h, s) = self.hit(pos, bounds);
+                    return (
+                        canvas::event::Status::Captured,
+                        Some(Message::PickColor(h, s)),
+                    );
+                }
+            }
+            _ => {}
+        }
+        (canvas::event::Status::Ignored, None)
+    }
+
+    fn draw(
+        &self,
+        _state: &Self::State,
+        renderer: &Renderer,
+        _theme: &Theme,
+        bounds: Rectangle,
+        _cursor: mouse::Cursor,
+    ) -> Vec<Geometry> {
+        let mut frame = Frame::new(renderer, bounds.size());
+        let c = frame.center();
+        let r = Self::radius(bounds);
+        for hi in 0..HUE_STEPS {
+            let h0 = hi as f32 * 360.0 / HUE_STEPS as f32;
+            let h1 = (hi + 1) as f32 * 360.0 / HUE_STEPS as f32;
+            for si in 0..SAT_STEPS {
+                let s0 = si as f32 / SAT_STEPS as f32;
+                let s1 = (si + 1) as f32 / SAT_STEPS as f32;
+                let a0 = h0.to_radians();
+                let a1 = h1.to_radians();
+                let p = |a: f32, s: f32| Point::new(c.x + r * s * a.cos(), c.y + r * s * a.sin());
+                let path = Path::new(|b| {
+                    b.move_to(p(a0, s0));
+                    b.line_to(p(a0, s1));
+                    b.line_to(p(a1, s1));
+                    b.line_to(p(a1, s0));
+                    b.close();
+                });
+                frame.fill(
+                    &path,
+                    color::hsv_to_rgb((h0 + h1) / 2.0, (s0 + s1) / 2.0, 1.0),
+                );
+            }
+        }
+
+        let pos = self.point(bounds, self.hue, self.sat);
+        frame.fill(&Path::circle(pos, 7.0), Color::WHITE);
+        frame.stroke(
+            &Path::circle(pos, 7.0),
+            Stroke {
+                width: 2.0,
+                style: Style::Solid(Color::BLACK),
+                ..Stroke::default()
+            },
+        );
+
+        vec![frame.into_geometry()]
+    }
+
+    fn mouse_interaction(
+        &self,
+        _state: &Self::State,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+    ) -> mouse::Interaction {
+        if cursor.position_in(bounds).is_some() {
+            mouse::Interaction::Crosshair
+        } else {
+            mouse::Interaction::default()
+        }
+    }
+}

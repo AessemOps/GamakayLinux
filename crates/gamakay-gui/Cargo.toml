@@ -15,4 +15,4 @@ path = "src/main.rs"
 [dependencies]
 gamakay-core.workspace = true
 gamakay-hidraw.workspace = true
-iced = { version = "0.13", features = ["canvas"] }
+iced = { version = "0.13", features = ["canvas", "smol"] }

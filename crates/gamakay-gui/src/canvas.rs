@@ -11,6 +11,7 @@ use iced::{Color, Length, Point, Rectangle, Renderer, Size, Theme, alignment, mo
 use gamakay_core::layout::{LK67_HEIGHT, LK67_LAYOUT, LK67_WIDTH, LayoutKey};
 
 use crate::Message;
+use crate::color;
 
 const GAP: f32 = 4.0;
 const RADIUS: f32 = 5.0;
@@ -29,8 +30,39 @@ pub struct Keyboard<'a> {
     pub selected: Option<u8>,
     /// A pending change to preview: (slot, new binding).
     pub preview: Option<(u8, String)>,
-    /// Tint every key (lighting preview).
-    pub tint: Option<Color>,
+    /// A live lighting preview (colour, rainbow, brightness, animation).
+    pub lighting: Option<LightPreview>,
+}
+
+/// The lighting settings previewed on the board.
+#[derive(Clone, Copy)]
+pub struct LightPreview {
+    pub color: Color,
+    pub rainbow: bool,
+    /// 0..=4.
+    pub brightness: u8,
+    /// Wire mode; 1 (static) does not animate.
+    pub mode: u8,
+    /// Animation phase, advanced by the app while the tab is open.
+    pub phase: f32,
+}
+
+/// The fill for one key under the current lighting preview.
+fn key_color(lp: &LightPreview, i: usize) -> Color {
+    let base = if lp.rainbow {
+        color::hsv_to_rgb((i as f32 * 6.0 + lp.phase * 40.0) % 360.0, 0.85, 1.0)
+    } else {
+        lp.color
+    };
+    let level = 0.3 + f32::from(lp.brightness) * 0.175;
+    // Static holds; breathing pulses all keys together; everything else runs a
+    // wave across the board.
+    let anim = match lp.mode {
+        1 => 1.0,
+        2 => 0.55 + 0.45 * (lp.phase * 1.2).sin().mul_add(0.5, 0.5),
+        _ => 0.5 + 0.5 * (lp.phase * 2.0 + i as f32 * 0.4).sin().mul_add(0.5, 0.5),
+    };
+    color::scale(base, (level * anim).clamp(0.15, 1.0))
 }
 
 /// A `Canvas` widget over the layout.
@@ -78,7 +110,7 @@ impl Program<Message> for Keyboard<'_> {
         let ox = (bounds.width - LK67_WIDTH * scale) / 2.0;
         let oy = (bounds.height - LK67_HEIGHT * scale) / 2.0;
 
-        for k in LK67_LAYOUT {
+        for (i, k) in LK67_LAYOUT.iter().enumerate() {
             let rect = Rectangle::new(
                 Point::new(ox + k.x * scale + GAP / 2.0, oy + k.y * scale + GAP / 2.0),
                 Size::new((k.w * scale - GAP).max(2.0), (k.h * scale - GAP).max(2.0)),
@@ -96,7 +128,7 @@ impl Program<Message> for Keyboard<'_> {
             let fill = if selected {
                 KEY_SELECTED
             } else {
-                self.tint.unwrap_or(KEY_BG)
+                self.lighting.map(|lp| key_color(&lp, i)).unwrap_or(KEY_BG)
             };
             let path = Path::rounded_rectangle(rect.position(), rect.size(), RADIUS.into());
             frame.fill(&path, fill);
