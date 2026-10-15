@@ -323,17 +323,6 @@ impl App {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let tabs = row(Tab::ALL.map(|t| {
-            let b = button(text(t.label())).on_press(Message::Tab(t));
-            let b = if t == self.tab {
-                b.style(button::primary)
-            } else {
-                b.style(button::secondary)
-            };
-            Element::from(b)
-        }))
-        .spacing(4);
-
         let body: Element<Message> = match self.tab {
             Tab::Info => self.view_info(),
             Tab::Lighting => self.view_lighting(),
@@ -341,18 +330,53 @@ impl App {
             Tab::Macros => self.view_macros(),
         };
 
-        let title = row![
-            text("GamaKay").size(22),
-            horizontal_space(),
-            button(text("Reconnect")).on_press(Message::Connect),
-            self.status_pill(),
-        ]
-        .spacing(10)
-        .align_y(iced::Alignment::Center);
+        let main =
+            container(scrollable(container(body).height(Length::Shrink)).height(Length::Fill))
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .padding(16);
 
-        container(column![title, tabs, scrollable(body).height(Length::Fill)].spacing(12))
-            .padding(16)
-            .into()
+        row![self.sidebar(), main].into()
+    }
+
+    /// The left sidebar: the device, the section menu and the connection.
+    fn sidebar(&self) -> Element<'_, Message> {
+        let model = self
+            .summary
+            .as_ref()
+            .map(|s| s.model.clone())
+            .unwrap_or_else(|| "no keyboard".into());
+        let menu: Vec<Element<Message>> = Tab::ALL
+            .iter()
+            .map(|&t| {
+                let active = t == self.tab;
+                button(text(t.label()).size(14))
+                    .on_press(Message::Tab(t))
+                    .width(Length::Fill)
+                    .style(if active { button::primary } else { menu_button })
+                    .into()
+            })
+            .collect();
+        container(
+            column![
+                text("GamaKay").size(20),
+                text(model).size(12),
+                horizontal_space().height(Length::Fixed(6.0)),
+                column(menu).spacing(4),
+                horizontal_space(),
+                self.status_pill(),
+                button(text("Reconnect"))
+                    .on_press(Message::Connect)
+                    .width(Length::Fill)
+                    .style(menu_button),
+            ]
+            .spacing(8),
+        )
+        .width(Length::Fixed(200.0))
+        .height(Length::Fill)
+        .padding(14)
+        .style(sidebar_style)
+        .into()
     }
 
     fn status_pill(&self) -> Element<'_, Message> {
@@ -392,7 +416,8 @@ impl App {
     }
 
     /// The lighting preview as a grid of coloured key widgets (a canvas would
-    /// be cached by the renderer and would not animate).
+    /// be cached by the renderer and would not animate). Horizontal gaps are
+    /// reproduced so the layout matches the board.
     fn preview_grid(&self, mode_code: u8, rgb: [u8; 3]) -> Element<'_, Message> {
         let p = patterns::Params {
             mode: mode_code,
@@ -404,39 +429,51 @@ impl App {
             rgb,
         };
         let frame = self.phase / (patterns::FRAME_MS / 1000.0);
-        let unit = 30.0;
+        let unit = 52.0f32;
+        let pad = 4.0f32;
+
         let mut rows: BTreeMap<i32, Vec<&LayoutKey>> = BTreeMap::new();
         for k in LK67_LAYOUT.iter().filter(|k| !k.knob) {
             rows.entry(k.y as i32).or_default().push(k);
         }
+
         let rows_el: Vec<Element<Message>> = rows
             .into_values()
-            .map(|keys| {
-                let cells: Vec<Element<Message>> = keys
-                    .into_iter()
-                    .map(|k| {
-                        let x = (k.x + k.w / 2.0) / LK67_WIDTH;
-                        let y = (k.y + k.h / 2.0) / LK67_HEIGHT;
-                        let c = patterns::color_at(&p, x, y, k.slot as usize, frame);
-                        container(text(k.label).size(9))
-                            .width(Length::Fixed(k.w * unit - 2.0))
-                            .height(Length::Fixed(unit - 2.0))
+            .map(|mut keys| {
+                keys.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap_or(std::cmp::Ordering::Equal));
+                let mut cells: Vec<Element<Message>> = Vec::new();
+                let mut prev_end = 0.0f32;
+                for k in keys {
+                    let gap = k.x - prev_end;
+                    if gap > 0.05 {
+                        cells.push(container(text(" ")).width(Length::Fixed(gap * unit)).into());
+                    }
+                    let x = (k.x + k.w / 2.0) / LK67_WIDTH;
+                    let y = (k.y + k.h / 2.0) / LK67_HEIGHT;
+                    let c = patterns::color_at(&p, x, y, k.slot as usize, frame);
+                    cells.push(
+                        container(text("").size(11))
+                            .width(Length::Fixed(k.w * unit - pad))
+                            .height(Length::Fixed(unit - pad))
+                            .align_x(iced::Alignment::Center)
+                            .align_y(iced::Alignment::Center)
                             .style(move |_: &Theme| container::Style {
                                 background: Some(Background::Color(c)),
                                 border: Border {
-                                    radius: 4.0.into(),
+                                    radius: 5.0.into(),
                                     width: 0.0,
                                     color: Color::TRANSPARENT,
                                 },
                                 ..container::Style::default()
                             })
-                            .into()
-                    })
-                    .collect();
-                Element::from(row(cells).spacing(2))
+                            .into(),
+                    );
+                    prev_end = k.x + k.w;
+                }
+                Element::from(row(cells))
             })
             .collect();
-        column(rows_el).spacing(2).into()
+        column(rows_el).spacing(pad).into()
     }
 
     fn view_lighting(&self) -> Element<'_, Message> {
@@ -607,6 +644,33 @@ impl App {
         ]
         .spacing(12)
         .into()
+    }
+}
+
+/// The sidebar background.
+fn sidebar_style(_: &Theme) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(Color::from_rgb(0.08, 0.08, 0.11))),
+        ..container::Style::default()
+    }
+}
+
+/// A flat, full-width sidebar button.
+fn menu_button(_: &Theme, status: button::Status) -> button::Style {
+    let hovered = matches!(status, button::Status::Hovered | button::Status::Pressed);
+    button::Style {
+        background: Some(Background::Color(if hovered {
+            Color::from_rgb(0.16, 0.16, 0.21)
+        } else {
+            Color::from_rgb(0.11, 0.11, 0.15)
+        })),
+        text_color: Color::from_rgb(0.85, 0.86, 0.9),
+        border: Border {
+            radius: 6.0.into(),
+            width: 0.0,
+            color: Color::TRANSPARENT,
+        },
+        ..button::Style::default()
     }
 }
 
