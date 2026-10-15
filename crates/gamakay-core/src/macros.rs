@@ -183,6 +183,123 @@ fn encode_press(out: &mut Vec<u8>, code: u8, pressed: bool, delay_ms: u16) {
     }
 }
 
+/// Parse the `--steps` DSL shared by the CLI and the GUI:
+/// `A+@20, A-@20`, `mouse:0+@10`, `move:5:-3@10`. Each event may carry a
+/// trailing `@MS` delay (default 0).
+pub fn parse_steps(s: &str) -> Result<Vec<MacroEvent>> {
+    let mut events = Vec::new();
+    for raw in s.split(',') {
+        let tok = raw.trim();
+        if tok.is_empty() {
+            continue;
+        }
+        let (body, delay) = match tok.rsplit_once('@') {
+            Some((b, d)) => (
+                b.trim(),
+                d.trim()
+                    .parse::<u16>()
+                    .map_err(|_| Error::Transport(format!("bad delay in {tok:?}")))?,
+            ),
+            None => (tok, 0u16),
+        };
+        if let Some(rest) = body.strip_prefix("move:") {
+            let (dx, dy) = rest
+                .split_once(':')
+                .ok_or_else(|| Error::Transport(format!("move needs dx:dy, got {rest:?}")))?;
+            let dx: i8 = dx
+                .trim()
+                .parse()
+                .map_err(|_| Error::Transport("move dx".into()))?;
+            let dy: i8 = dy
+                .trim()
+                .parse()
+                .map_err(|_| Error::Transport("move dy".into()))?;
+            if delay > 255 {
+                return Err(Error::OutOfRange {
+                    field: "move delay",
+                    value: i64::from(delay),
+                });
+            }
+            events.push(MacroEvent::MouseMove {
+                dx,
+                dy,
+                delay_ms: delay as u8,
+            });
+            continue;
+        }
+        if let Some(rest) = body.strip_prefix("mouse:") {
+            let (n, pressed) = split_press(rest)?;
+            let button: u8 = n
+                .parse()
+                .map_err(|_| Error::Transport("mouse button number (0..4)".into()))?;
+            events.push(MacroEvent::MouseButton {
+                button,
+                pressed,
+                delay_ms: delay,
+            });
+            continue;
+        }
+        let (name, pressed) = split_press(body)?;
+        let usage = crate::keycode::usage(name)
+            .ok_or_else(|| Error::Transport(format!("unknown key {name:?}")))?;
+        events.push(MacroEvent::Key {
+            usage,
+            pressed,
+            delay_ms: delay,
+        });
+    }
+    Ok(events)
+}
+
+fn split_press(s: &str) -> Result<(&str, bool)> {
+    if let Some(n) = s.strip_suffix('+') {
+        Ok((n.trim(), true))
+    } else if let Some(n) = s.strip_suffix('-') {
+        Ok((n.trim(), false))
+    } else {
+        Err(Error::Transport(format!(
+            "event {s:?} needs + (down) or - (up)"
+        )))
+    }
+}
+
+/// A short human description of a macro.
+pub fn describe(m: &Macro) -> String {
+    if m.events.is_empty() {
+        return "(empty)".to_string();
+    }
+    m.events
+        .iter()
+        .map(describe_event)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// A short human description of one event.
+pub fn describe_event(e: &MacroEvent) -> String {
+    match *e {
+        MacroEvent::Key {
+            usage,
+            pressed,
+            delay_ms,
+        } => {
+            let name = crate::keycode::name(usage)
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("0x{usage:02X}"));
+            format!("{name}{}@{delay_ms}", if pressed { "+" } else { "-" })
+        }
+        MacroEvent::MouseButton {
+            button,
+            pressed,
+            delay_ms,
+        } => format!(
+            "mouse:{button}{}@{delay_ms}",
+            if pressed { "+" } else { "-" }
+        ),
+        MacroEvent::MouseMove { dx, dy, delay_ms } => format!("move:{dx}:{dy}@{delay_ms}"),
+    }
+}
+
 impl Session<'_> {
     /// Read a macro (`0x8B [slot, page]`, four raw pages).
     pub fn read_macro(&mut self, slot: u8) -> Result<Macro> {

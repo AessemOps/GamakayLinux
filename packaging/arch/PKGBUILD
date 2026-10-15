@@ -27,6 +27,7 @@ build() {
 package() {
   cd "$pkgname-$pkgver"
   install -Dm755 target/release/gamakay "$pkgdir/usr/bin/gamakay"
+  install -Dm755 target/release/gamakay-gui "$pkgdir/usr/bin/gamakay-gui"
   install -Dm644 packaging/udev/70-gamakay.rules \
     "$pkgdir/usr/lib/udev/rules.d/70-gamakay.rules"
   install -Dm644 packaging/gamakay.desktop \

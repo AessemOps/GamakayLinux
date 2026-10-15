@@ -5,9 +5,9 @@ the **GamaKay LK67**. It configures the keyboard over USB, the 2.4 GHz dongle
 and Bluetooth with no resident process: every setting is written to the
 keyboard's own memory and the program exits.
 
-> Status: **Phase 4** — `list` / `info`, lighting, the base and Fn keymaps, and
-> macros are implemented and verified on hardware. The iced GUI is Phase 5. See
-> `.kilo/plans/1792003709046-gamakay-linux-rust-app.md`.
+> Status: **Phase 5** — `list` / `info`, lighting, the base and Fn keymaps,
+> macros, and an iced GUI (`gamakay-gui`) are implemented and verified on
+> hardware. See `.kilo/plans/1792003709046-gamakay-linux-rust-app.md`.
 >
 > The 2026-10 firmware update re-enumerated the board as `3151:4003` (id 290);
 > both the new and the pre-update ids are supported.
@@ -96,6 +96,18 @@ CapsLock = "Esc"
 ```
 
 `--dry-run` prints the packet a command would send and sends nothing.
+
+### GUI
+
+`gamakay-gui` is an iced 0.13 front-end over the same core: tabs for Info,
+Lighting, Keymap (base and Fn) and Macros. All device I/O runs on a worker
+thread, so the window never blocks; there are no idle timers or redraws.
+`gamakay-gui lighting` (or `keymap`/`macros`/`info`) opens on a given tab.
+
+```bash
+gamakay-gui              # opens on the Info tab
+gamakay-gui lighting
+```
 
 ### Writing
 

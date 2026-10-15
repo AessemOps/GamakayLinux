@@ -45,3 +45,4 @@ Bump the `Last reviewed` line above when any of these change.
 | `anyhow` | `anyhow` | MIT OR Apache-2.0 |
 | `serde` | `serde`, `serde_derive` | MIT OR Apache-2.0 |
 | `toml` | `toml`, `toml_edit`, `serde_spanned`, `toml_datetime`, `winnow` | MIT OR Apache-2.0 |
+| `iced` | `iced` (GUI) and its tree (wgpu, winit, cosmic-text, …) | MIT |
