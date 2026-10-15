@@ -6,9 +6,7 @@ and Bluetooth with no resident process: every setting is written to the
 keyboard's own memory and the program exits.
 
 > Status: **Phase 4** — `list` / `info`, lighting, the base and Fn keymaps, and
-> macros are implemented. Lighting and both keymaps are verified on hardware;
-> macro **reads** work but macro **writes** are unverified on the LK67 (they do
-> not read back) and are gated behind `--force`. The iced GUI is Phase 5. See
+> macros are implemented and verified on hardware. The iced GUI is Phase 5. See
 > `.kilo/plans/1792003709046-gamakay-linux-rust-app.md`.
 >
 > The 2026-10 firmware update re-enumerated the board as `3151:4003` (id 290);
@@ -103,13 +101,9 @@ CapsLock = "Esc"
 
 A write is **fire-and-forget**: the board applies it and commits it to onboard
 memory, and `gamakay` pauses before the next command so the settings endpoint
-stays healthy. Verify a write with a following `gamakay light`. If a write is
-interrupted and the endpoint stalls, unplug and replug the keyboard (typing is
-never affected). See `docs/protocol.md`.
-
-Macro **writes** are the exception: they do not read back on the LK67 yet, so
-`gamakay macro set|delete` refuse unless `--force` is given. Binding a macro to
-a key (`keymap set --to macro:N`) is verified.
+stays healthy. Verify a write with a following read (`gamakay light`, `gamakay
+macro list`). If a write is interrupted and the endpoint stalls, unplug and
+replug the keyboard (typing is never affected). See `docs/protocol.md`.
 
 ### Permissions
 

@@ -91,7 +91,6 @@ fn list(cli: &Cli, args: &ListArgs) -> Result<()> {
 }
 
 fn set(cli: &Cli, args: &SetArgs) -> Result<()> {
-    require_verified(cli)?;
     let events = parse_steps(&args.steps)?;
     if events.is_empty() {
         bail!("--steps is empty");
@@ -128,7 +127,6 @@ fn set(cli: &Cli, args: &SetArgs) -> Result<()> {
 }
 
 fn delete(cli: &Cli, args: &DeleteArgs) -> Result<()> {
-    require_verified(cli)?;
     let info = select_device(cli)?;
     let mut dev = HidrawDevice::open(&info.path)?;
     let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
@@ -142,19 +140,6 @@ fn delete(cli: &Cli, args: &DeleteArgs) -> Result<()> {
         println!("macro {} cleared", args.slot);
     }
     Ok(())
-}
-
-/// The macro write is not yet verified on the LK67: the slot does not read
-/// back (0x8B returns zeros), so either the opcode or the flow differs. Refuse
-/// by default rather than guess at opcodes that could hit a live register.
-fn require_verified(cli: &Cli) -> Result<()> {
-    if cli.force {
-        return Ok(());
-    }
-    bail!(
-        "macro writes are not yet verified on the LK67 (the slot does not read back); \
-         re-run with --force to send anyway — see docs/protocol.md"
-    )
 }
 
 fn describe(m: &Macro) -> String {

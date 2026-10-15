@@ -20,6 +20,8 @@ pub const MACRO_BYTES: usize = 256;
 pub const MACRO_PAGE_DATA: usize = 56;
 /// Pages a macro is read in: 4 x 64.
 pub const MACRO_PAGES: u8 = 4;
+/// Pages a macro write sends: 5 x 56 (>= 256 bytes).
+pub const MACRO_WRITE_PAGES: u8 = 5;
 
 const MOUSE_BTN_BASE: u8 = 0xF0; // ..=0xF4: left, right, middle, back, forward
 const MOUSE_MOVE: u8 = 0xF9;
@@ -199,7 +201,9 @@ impl Session<'_> {
         Ok(Macro::from_blob(&blob))
     }
 
-    /// Write a macro (`0x16`), one page per report, fire-and-forget.
+    /// Write a macro. Verified shape (from a vendor capture): opcode `0x0B`
+    /// (the base-class value, **not** the reference's yc500 `0x16`), header
+    /// `[slot, 0, 1, page, 0, 0]`, 56 bytes at byte 8, five pages. **[HW]**
     pub fn write_macro(&mut self, slot: u8, m: &Macro) -> Result<()> {
         if slot >= MACRO_SLOTS {
             return Err(Error::OutOfRange {
@@ -208,20 +212,23 @@ impl Session<'_> {
             });
         }
         let blob = m.to_blob()?;
-        // Send all four pages. The reference sends only the non-zero prefix,
-        // but neither variant reads back on the LK67 (see docs/protocol.md):
-        // macro writes are unverified on this unit.
-        let pages = MACRO_PAGES;
-        for page in 0..pages {
+        for page in 0..MACRO_WRITE_PAGES {
             let mut payload = [0u8; 63];
-            payload[0] = slot;
-            payload[1] = page;
-            payload[2] = MACRO_PAGE_DATA as u8;
-            payload[3] = u8::from(page == pages - 1);
+            payload[0] = slot; // packet byte 1
+            payload[1] = 0x00; // packet byte 2
+            payload[2] = 0x01; // packet byte 3
+            payload[3] = page; // packet byte 4
             let start = page as usize * MACRO_PAGE_DATA;
-            let end = (start + MACRO_PAGE_DATA).min(MACRO_BYTES);
-            payload[7..7 + (end - start)].copy_from_slice(&blob[start..end]);
-            self.send_page(cmd::SET_MACRO, &payload, Checksum::Bit7, page == pages - 1)?;
+            if start < MACRO_BYTES {
+                let end = (start + MACRO_PAGE_DATA).min(MACRO_BYTES);
+                payload[7..7 + (end - start)].copy_from_slice(&blob[start..end]);
+            }
+            self.send_page(
+                cmd::SET_MACRO,
+                &payload,
+                Checksum::Bit7,
+                page == MACRO_WRITE_PAGES - 1,
+            )?;
         }
         Ok(())
     }
