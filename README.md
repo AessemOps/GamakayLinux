@@ -105,10 +105,15 @@ canvas** drawn from the LK67 layout, with tabs for Info, Lighting, Keymap
 click a key to select it and the pending rebind is previewed on the key. The
 Lighting tab has a **hue/saturation colour wheel** (click or drag to pick) and
 a **live, animated preview** — the board reflects the colour, rainbow and
-brightness, pulsing or waving with the selected mode while the tab is open.
-All device I/O runs on a worker thread, so the window never blocks, and the
-animation only runs on the Lighting tab. `gamakay-gui lighting` (or
-`keymap`/`macros`/`info`) opens on a given tab.
+brightness, and reproduces the selected mode (static, breathing, spectrum,
+wave, ripple/radiant, star dots, flow, key shadow, layers, sine, spring, neon,
+loop, colour grid, snowfall, meteor, silent snow). The mode animations are
+**best-effort approximations** of the firmware (built from the timing tables in
+`docs/protocol.md`), not byte-exact; the reactive modes (key shadow, and modes
+that spawn on a key press) show their idle state. All device I/O runs on a
+worker thread, so the window never blocks, and the animation only runs on the
+Lighting tab. `gamakay-gui lighting` (or `keymap`/`macros`/`info`) opens on a
+given tab.
 
 ```bash
 gamakay-gui              # opens on the Info tab

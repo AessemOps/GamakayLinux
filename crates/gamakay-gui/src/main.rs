@@ -6,6 +6,7 @@
 mod canvas;
 mod color;
 mod colorwheel;
+mod patterns;
 mod worker;
 
 use std::collections::HashMap;
@@ -187,7 +188,7 @@ impl App {
             Message::PickColor(h, s) => {
                 self.color = color::to_hex(rgb8(color::hsv_to_rgb(h, s, 1.0)));
             }
-            Message::Tick => self.phase += 0.12,
+            Message::Tick => self.phase += 0.04,
             Message::SelectSlot(slot) => {
                 self.selected = Some(slot);
                 let cur = self
@@ -308,7 +309,7 @@ impl App {
         if self.tab == Tab::Lighting {
             Subscription::batch([
                 events,
-                iced::time::every(std::time::Duration::from_millis(60)).map(|_| Message::Tick),
+                iced::time::every(std::time::Duration::from_millis(40)).map(|_| Message::Tick),
             ])
         } else {
             events
@@ -415,7 +416,8 @@ impl App {
                 rainbow: self.rainbow,
                 brightness: self.brightness,
                 mode: mode_code,
-                phase: self.phase,
+                speed: self.speed,
+                t: self.phase,
             }),
         });
         let colour_field: Element<Message> = row![
