@@ -26,6 +26,7 @@ fn main() -> iced::Result {
     iced::application("GamaKay", App::update, App::view)
         .subscription(App::subscription)
         .theme(App::theme)
+        .window_size(iced::Size::new(1100.0, 760.0))
         .run()
 }
 
