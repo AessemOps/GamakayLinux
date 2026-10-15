@@ -187,8 +187,8 @@ disabled rather than guessed.
 | identify / revision | yes **[HW]** | ? | ? |
 | info / options / debounce | yes **[HW]** | ? | ? |
 | lighting | yes **[HW]** | ? | ? |
-| keymap | yes **[HW]** | ? | ? |
-| macros | write unverified **[HW]** | ? | ? |
+| keymap (base + Fn) | yes **[HW]** | ? | ? |
+| macros | read yes, write unverified **[HW]** | ? | ? |
 | battery | — (no command; receiver status only) | ? | ? |
 
 ## Phase 1 hardware findings (LK67, USB cable)
@@ -247,10 +247,10 @@ committed fixtures are the real captures.
   byte 8, nine pages, commit on page 8. Verified: read the layer, change one
   slot (CapsLock -> Esc), upload, read back, restore. Slots 126..127 never
   transmit (504 of 512 bytes), so they cannot be remapped.
-- **Fn layer read `0x90` echoes the request** (`90 00 <page> 00 …`) instead of
-  returning pages, so the Fn layer is not readable on this firmware and Fn
-  operations are withheld (`gamakay keymap --fn` refuses). **Open item:**
-  find the Fn read (another opcode, or a profile/sub-layer selector).
+- **Fn layer read `0x90`** did not return pages on the *pre-2026-10* firmware
+  (it echoed the request); the **2026-10 update fixed it** — see the firmware
+  section below. The Fn single write `0x15` is likewise ignored; the Fn bulk
+  write `0x10` works.
 - **Reset** is the factory reset `0x02`; it resets the whole keyboard, not one
   layer, so `gamakay keymap reset` requires `--yes`. Not exercised on
   hardware (destructive).
@@ -275,6 +275,48 @@ committed fixtures are the real captures.
 - **Open item:** capture the vendor app's macro write to find the correct
   opcode/flow (the reference's `0x16` shape does not stick here), then lift
   the `--force` gate.
+
+## 2026-10 firmware update (LK67, USB cable)
+
+The board was updated to the latest firmware. It re-enumerates and behaves
+differently; the new state is the current baseline.
+
+| | pre-update | 2026-10 update |
+|---|---|---|
+| USB ids | `0461:4002` | **`3151:4003`** |
+| identify `0x8F` id | 149 | **290** |
+| revision `0x80` | 205 | **310** |
+| Fn read `0x90` | echoed the request | **returns pages** |
+| macro read `0x8B` | zeros (none stored) | **returns macros** |
+| macro write `0x16` | did not stick | still **unverified** |
+
+- The identity (id) is firmware-dependent, so a record matches a set of ids
+  (`LK67` accepts 149 and 290); USB ids are only a hint.
+- **Fn layer now reads and writes.** Read `0x90` returns the same eight raw
+  pages as `0x89`; the Fn bulk write is `0x10` with the same shape as the base
+  bulk write `0x09` (`[profile, 0xF8, 1, page]` + 56 bytes at byte 8, nine
+  pages). Verified: read, change a slot (Grave -> F1), read back, restore.
+- **Macros now read.** `0x8B [slot, page]` returns the stored blob. A macro
+  written by the vendor tooling decodes cleanly, so the blob format is right.
+
+### Vendor capture (web driver, usbmon)
+
+The desktop app does not detect the board, but a WebHID **web driver** does.
+A host `usbmon` capture of that driver (scripts/capture-usb.sh) confirms the
+protocol is unchanged and shows the exact packets:
+
+- It uses the same opcodes: `0x8F`, `0x80`, `0x84`, `0x85`, `0x86`, `0x87`,
+  `0x91`, `0x92` reads, plus `0x07` lighting and `0x10` Fn bulk write.
+- **Fn bulk write** it sends is byte-for-byte our `write_layer` shape, which
+  is why the Fn write now round-trips.
+- **Lighting** it sends is our `[mode, wire_speed, brightness, (option<<4)|
+  flags, R, G, B]` with a Bit8 checksum.
+- It sends one `0xFD` with a zero payload before the rest (purpose unknown;
+  not required — our reads and writes work without it).
+
+**Open item:** the web driver did not write a macro, so the macro write
+`0x16` remains unverified (`gamakay macro set|delete` still need `--force`).
+A capture of a macro write would settle it.
 
 ## Provenance
 

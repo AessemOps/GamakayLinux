@@ -73,9 +73,15 @@ pub fn find_supported() -> Option<HidrawInfo> {
         .cloned()
 }
 
-/// A specific node by path.
+/// A specific node by path. Accepts a `/dev/hidrawN` node or its
+/// `/sys/class/hidraw/hidrawN` link.
 pub fn find(path: impl AsRef<Path>) -> Option<HidrawInfo> {
-    read_node(path.as_ref())
+    let p = path.as_ref();
+    if p.starts_with("/dev") {
+        let name = p.file_name()?;
+        return read_node(&Path::new("/sys/class/hidraw").join(name));
+    }
+    read_node(p)
 }
 
 fn read_node(class_link: &Path) -> Option<HidrawInfo> {

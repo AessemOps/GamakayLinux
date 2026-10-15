@@ -5,11 +5,14 @@ the **GamaKay LK67**. It configures the keyboard over USB, the 2.4 GHz dongle
 and Bluetooth with no resident process: every setting is written to the
 keyboard's own memory and the program exits.
 
-> Status: **Phase 4** — `list` / `info`, lighting, the base-layer keymap, and
-> macros are implemented. Lighting and keymap are verified on hardware; macro
-> writes are implemented but **unverified** on the LK67 (they do not read back)
-> and are gated behind `--force`. The iced GUI is Phase 5. See
+> Status: **Phase 4** — `list` / `info`, lighting, the base and Fn keymaps, and
+> macros are implemented. Lighting and both keymaps are verified on hardware;
+> macro **reads** work but macro **writes** are unverified on the LK67 (they do
+> not read back) and are gated behind `--force`. The iced GUI is Phase 5. See
 > `.kilo/plans/1792003709046-gamakay-linux-rust-app.md`.
+>
+> The 2026-10 firmware update re-enumerated the board as `3151:4003` (id 290);
+> both the new and the pre-update ids are supported.
 
 ## Why
 
