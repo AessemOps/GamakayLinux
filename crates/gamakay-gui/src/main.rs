@@ -9,6 +9,7 @@ mod colorwheel;
 mod patterns;
 mod worker;
 
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -20,6 +21,7 @@ use iced::widget::{
 use iced::{Background, Border, Color, Element, Length, Subscription, Theme};
 
 use gamakay_core::keymap::SlotValue;
+use gamakay_core::layout::{LK67_HEIGHT, LK67_LAYOUT, LK67_WIDTH, LayoutKey};
 use gamakay_core::light::{LK67_FLAGS, LedParam, LedState, Mode};
 use worker::{Event, Request, Summary};
 
@@ -386,7 +388,55 @@ impl App {
             kv("Profile", s.profile.to_string()),
         ]
         .spacing(10);
-        section("Device", grid.into())
+        section("Device".to_string(), grid.into())
+    }
+
+    /// The lighting preview as a grid of coloured key widgets (a canvas would
+    /// be cached by the renderer and would not animate).
+    fn preview_grid(&self, mode_code: u8, rgb: [u8; 3]) -> Element<'_, Message> {
+        let p = patterns::Params {
+            mode: mode_code,
+            speed: self.speed,
+            brightness: self.brightness,
+            brightness_max: 4,
+            option: self.direction,
+            rainbow: self.rainbow,
+            rgb,
+        };
+        let frame = self.phase / (patterns::FRAME_MS / 1000.0);
+        let unit = 30.0;
+        let mut rows: BTreeMap<i32, Vec<&LayoutKey>> = BTreeMap::new();
+        for k in LK67_LAYOUT.iter().filter(|k| !k.knob) {
+            rows.entry(k.y as i32).or_default().push(k);
+        }
+        let rows_el: Vec<Element<Message>> = rows
+            .into_values()
+            .map(|keys| {
+                let cells: Vec<Element<Message>> = keys
+                    .into_iter()
+                    .map(|k| {
+                        let x = (k.x + k.w / 2.0) / LK67_WIDTH;
+                        let y = (k.y + k.h / 2.0) / LK67_HEIGHT;
+                        let c = patterns::color_at(&p, x, y, k.slot as usize, frame);
+                        container(text(k.label).size(9))
+                            .width(Length::Fixed(k.w * unit - 2.0))
+                            .height(Length::Fixed(unit - 2.0))
+                            .style(move |_: &Theme| container::Style {
+                                background: Some(Background::Color(c)),
+                                border: Border {
+                                    radius: 4.0.into(),
+                                    width: 0.0,
+                                    color: Color::TRANSPARENT,
+                                },
+                                ..container::Style::default()
+                            })
+                            .into()
+                    })
+                    .collect();
+                Element::from(row(cells).spacing(2))
+            })
+            .collect();
+        column(rows_el).spacing(2).into()
     }
 
     fn view_lighting(&self) -> Element<'_, Message> {
@@ -407,20 +457,7 @@ impl App {
                 ..container::Style::default()
             })
             .into();
-        let preview = canvas::keyboard(canvas::Keyboard {
-            bindings: &self.bindings,
-            selected: None,
-            preview: None,
-            lighting: Some(canvas::LightPreview {
-                mode: mode_code,
-                speed: self.speed,
-                brightness: self.brightness,
-                option: self.direction,
-                rainbow: self.rainbow,
-                rgb,
-                t: self.phase,
-            }),
-        });
+        let preview = self.preview_grid(mode_code, rgb);
         let colour_field: Element<Message> = row![
             Element::from(colorwheel::wheel(colorwheel::ColorWheel::new(hue, sat))),
             Element::from(
@@ -472,8 +509,8 @@ impl App {
         ]
         .spacing(12);
         column![
-            section("Preview", preview.into()),
-            section("Backlight", controls.into()),
+            section("Preview".to_string(), preview),
+            section("Backlight".to_string(), controls.into()),
         ]
         .spacing(12)
         .into()
@@ -508,7 +545,7 @@ impl App {
         .spacing(2);
         column![
             section(
-                "Layer",
+                "Layer".to_string(),
                 row![
                     text("Fn layer"),
                     toggler(self.fn_layer).on_toggle(Message::ToggleFn),
@@ -519,9 +556,9 @@ impl App {
                 .align_y(iced::Alignment::Center)
                 .into()
             ),
-            section("Board", kb.into()),
-            section("Rebind", editor.into()),
-            section("Slots", list.into()),
+            section("Board".to_string(), kb.into()),
+            section("Rebind".to_string(), editor.into()),
+            section("Slots".to_string(), list.into()),
         ]
         .spacing(12)
         .into()
@@ -564,9 +601,12 @@ impl App {
             macro_buttons(),
         ]
         .spacing(12);
-        column![section("Macros", list), section("Edit", editor.into()),]
-            .spacing(12)
-            .into()
+        column![
+            section("Macros".to_string(), list),
+            section("Edit".to_string(), editor.into()),
+        ]
+        .spacing(12)
+        .into()
     }
 }
 
@@ -584,7 +624,7 @@ fn card(_: &Theme) -> container::Style {
 }
 
 /// A titled card.
-fn section<'a>(title: &'a str, body: Element<'a, Message>) -> Element<'a, Message> {
+fn section<'a>(title: String, body: Element<'a, Message>) -> Element<'a, Message> {
     container(column![text(title).size(15), body].spacing(10))
         .padding(14)
         .style(card)
