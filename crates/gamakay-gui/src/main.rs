@@ -11,9 +11,10 @@ use std::sync::Mutex;
 
 use iced::futures::channel::mpsc::{UnboundedReceiver, unbounded};
 use iced::widget::{
-    button, column, container, pick_list, row, scrollable, slider, text, text_input, toggler,
+    button, column, container, horizontal_space, pick_list, row, scrollable, slider, text,
+    text_input, toggler,
 };
-use iced::{Element, Length, Subscription, Theme};
+use iced::{Background, Border, Color, Element, Length, Subscription, Theme};
 
 use gamakay_core::keymap::SlotValue;
 use gamakay_core::light::{LK67_FLAGS, LedParam, LedState, Mode};
@@ -229,7 +230,7 @@ impl App {
             .map(|m| m.name().to_string())
             .unwrap_or_else(|| s.mode.to_string());
         self.color = format!("#{:02x}{:02x}{:02x}", s.rgb[0], s.rgb[1], s.rgb[2]);
-        self.brightness = s.brightness.min(5);
+        self.brightness = s.brightness.min(4);
         self.speed = s.speed.min(4);
         self.direction = s.option;
         self.rainbow = s.flags == LK67_FLAGS.rainbow;
@@ -318,92 +319,127 @@ impl App {
             Tab::Macros => self.view_macros(),
         };
 
-        let header = row![
+        let title = row![
+            text("GamaKay").size(22),
+            horizontal_space(),
             button(text("Reconnect")).on_press(Message::Connect),
-            text(&self.status),
+            self.status_pill(),
         ]
-        .spacing(12)
+        .spacing(10)
         .align_y(iced::Alignment::Center);
 
-        container(column![header, tabs, scrollable(body).height(Length::Fill)])
-            .padding(12)
+        container(column![title, tabs, scrollable(body).height(Length::Fill)].spacing(12))
+            .padding(16)
+            .into()
+    }
+
+    fn status_pill(&self) -> Element<'_, Message> {
+        let color = if self.connected {
+            Color::from_rgb8(0x4c, 0xaf, 0x50)
+        } else {
+            Color::from_rgb8(0xcf, 0x66, 0x79)
+        };
+        container(text(self.status.clone()).size(13))
+            .padding([4, 10])
+            .style(move |_| container::Style {
+                background: Some(Background::Color(color.scale_alpha(0.16))),
+                text_color: Some(color),
+                border: Border {
+                    radius: 12.0.into(),
+                    width: 1.0,
+                    color,
+                },
+                ..container::Style::default()
+            })
             .into()
     }
 
     fn view_info(&self) -> Element<'_, Message> {
         let s = self.summary.clone().unwrap_or_default();
-        column![
-            text(format!("Name:      {}", s.name)),
-            text(format!("USB id:    {}", s.usb)),
-            text(format!("Link:      {}", s.link)),
-            text(format!("Device id: {}", s.id)),
-            text(format!("Model:     {}", s.model)),
-            text(format!(
-                "Firmware:  {}",
-                s.firmware.clone().unwrap_or_else(|| "-".into())
-            )),
-            text(format!("Profile:   {}", s.profile)),
+        let grid = column![
+            kv("Name", s.name.clone()),
+            kv("Model", s.model.clone()),
+            kv("USB id", s.usb.clone()),
+            kv("Link", s.link.clone()),
+            kv("Device id", s.id.to_string()),
+            kv("Firmware", s.firmware.clone().unwrap_or_else(|| "-".into())),
+            kv("Profile", s.profile.to_string()),
         ]
-        .spacing(6)
-        .into()
+        .spacing(10);
+        section("Device", grid.into())
     }
 
     fn view_lighting(&self) -> Element<'_, Message> {
-        let on = self.connected;
-        let tint = parse_color(&self.color).map(|[r, g, b]| iced::Color::from_rgb8(r, g, b));
+        let tint = parse_color(&self.color).map(|[r, g, b]| Color::from_rgb8(r, g, b));
+        let swatch = container(text(" "))
+            .width(Length::Fixed(22.0))
+            .height(Length::Fixed(22.0))
+            .style(move |_| container::Style {
+                background: Some(Background::Color(tint.unwrap_or(Color::BLACK))),
+                border: Border {
+                    radius: 4.0.into(),
+                    width: 1.0,
+                    color: Color::from_rgb(0.4, 0.4, 0.45),
+                },
+                ..container::Style::default()
+            });
         let preview = canvas::keyboard(canvas::Keyboard {
             bindings: &self.bindings,
             selected: None,
             preview: None,
             tint,
         });
-        let mut col = column![
-            text("Preview").size(16),
-            preview,
-            row![
-                text("Mode"),
-                pick_list(self.modes.clone(), Some(self.mode.clone()), Message::Mode),
-            ]
-            .spacing(8)
-            .align_y(iced::Alignment::Center),
-            row![
-                text("Colour"),
-                text_input("#rrggbb", &self.color).on_input(Message::Color),
-            ]
-            .spacing(8)
-            .align_y(iced::Alignment::Center),
-            row![
-                text("Brightness"),
-                slider(0..=5, self.brightness, Message::Brightness),
-            ]
-            .spacing(8)
-            .align_y(iced::Alignment::Center),
-            row![text("Speed"), slider(0..=4, self.speed, Message::Speed),]
+        let controls = column![
+            labeled(
+                "Mode",
+                pick_list(self.modes.clone(), Some(self.mode.clone()), Message::Mode).into()
+            ),
+            labeled(
+                "Colour",
+                row![
+                    Element::from(swatch),
+                    Element::from(text_input("#rrggbb", &self.color).on_input(Message::Color)),
+                ]
                 .spacing(8)
-                .align_y(iced::Alignment::Center),
-            row![
-                text("Direction"),
-                slider(0..=3, self.direction, Message::Direction),
-            ]
-            .spacing(8)
-            .align_y(iced::Alignment::Center),
-            row![
-                text("Rainbow"),
-                toggler(self.rainbow).on_toggle(Message::Rainbow)
-            ]
-            .spacing(8),
-            row![
-                button(text("Apply")).on_press(Message::ApplyLight),
-                button(text("On")).on_press(Message::LightOn),
-                button(text("Off")).on_press(Message::LightOff),
-            ]
-            .spacing(8),
+                .into()
+            ),
+            labeled(
+                "Brightness",
+                row![
+                    Element::from(slider(0..=4, self.brightness, Message::Brightness)),
+                    text(format!("{} / 4", self.brightness)),
+                ]
+                .spacing(8)
+                .into()
+            ),
+            labeled(
+                "Speed",
+                row![
+                    Element::from(slider(0..=4, self.speed, Message::Speed)),
+                    text(format!("{} / 4", self.speed)),
+                ]
+                .spacing(8)
+                .into()
+            ),
+            labeled(
+                "Direction",
+                row![
+                    Element::from(slider(0..=3, self.direction, Message::Direction)),
+                    text(self.direction.to_string()),
+                ]
+                .spacing(8)
+                .into()
+            ),
+            rainbow_row(self.rainbow),
+            light_buttons(),
         ]
-        .spacing(10);
-        if !on {
-            col = col.push(text("No keyboard connected."));
-        }
-        col.into()
+        .spacing(12);
+        column![
+            section("Preview", preview.into()),
+            section("Backlight", controls.into()),
+        ]
+        .spacing(12)
+        .into()
     }
 
     fn view_keymap(&self) -> Element<'_, Message> {
@@ -413,58 +449,156 @@ impl App {
             preview: self.preview.clone(),
             tint: None,
         });
-        let list = self.layer.iter().map(|(slot, desc)| {
+        let editing = match self.selected {
+            Some(slot) => format!("Editing slot {slot}"),
+            None => "Click a key on the board to edit it".to_string(),
+        };
+        let editor = row![
+            text_input("slot:key (e.g. 3:Esc)", &self.slot_edit).on_input(Message::SlotEdit),
+            button(text("Apply"))
+                .on_press(Message::SlotApply)
+                .style(button::primary),
+        ]
+        .spacing(8);
+        let list = column(self.layer.iter().map(|(slot, desc)| {
             let mark = if self.selected == Some(*slot) {
-                ">"
+                "●"
             } else {
                 " "
             };
-            text(format!("{mark} slot {slot:>3}   {desc}")).into()
-        });
+            Element::from(text(format!("{mark} slot {slot:>3}   {desc}")))
+        }))
+        .spacing(2);
         column![
-            row![
-                text("Layer"),
-                toggler(self.fn_layer).on_toggle(Message::ToggleFn)
-            ]
-            .spacing(8),
-            kb,
-            text("Click a key to select it, then rebind it below."),
-            row![
-                text_input("slot:key (e.g. 3:Esc)", &self.slot_edit).on_input(Message::SlotEdit),
-                button(text("Apply")).on_press(Message::SlotApply),
-            ]
-            .spacing(8),
-            column(list).spacing(2),
+            section(
+                "Layer",
+                row![
+                    text("Fn layer"),
+                    toggler(self.fn_layer).on_toggle(Message::ToggleFn),
+                    horizontal_space(),
+                    text(editing).size(13),
+                ]
+                .spacing(10)
+                .align_y(iced::Alignment::Center)
+                .into()
+            ),
+            section("Board", kb.into()),
+            section("Rebind", editor.into()),
+            section("Slots", list.into()),
         ]
-        .spacing(10)
+        .spacing(12)
         .into()
     }
 
     fn view_macros(&self) -> Element<'_, Message> {
-        let rows = self
-            .macros
-            .iter()
-            .map(|(slot, desc)| text(format!("macro {slot:>2}   {desc}")).into());
-        column![
+        let list: Element<Message> = if self.macros.is_empty() {
+            text("No macros stored.").into()
+        } else {
+            column(
+                self.macros
+                    .iter()
+                    .map(|(slot, desc)| Element::from(text(format!("macro {slot:>2}   {desc}")))),
+            )
+            .spacing(2)
+            .into()
+        };
+        let editor = column![
             row![
-                text("Slot"),
-                text_input("0", &self.macro_slot).on_input(Message::MacroSlot),
-                text("Repeat"),
-                text_input("1", &self.macro_repeat).on_input(Message::MacroRepeat),
+                labeled(
+                    "Slot",
+                    text_input("0", &self.macro_slot)
+                        .on_input(Message::MacroSlot)
+                        .into()
+                ),
+                labeled(
+                    "Repeat",
+                    text_input("1", &self.macro_repeat)
+                        .on_input(Message::MacroRepeat)
+                        .into()
+                ),
             ]
-            .spacing(8)
-            .align_y(iced::Alignment::Center),
-            text_input("A+@20, A-@20", &self.macro_steps).on_input(Message::MacroSteps),
-            row![
-                button(text("Set")).on_press(Message::MacroSet),
-                button(text("Delete")).on_press(Message::MacroDelete),
-            ]
-            .spacing(8),
-            column(rows).spacing(2),
+            .spacing(12),
+            labeled(
+                "Steps",
+                text_input("A+@20, A-@20", &self.macro_steps)
+                    .on_input(Message::MacroSteps)
+                    .into()
+            ),
+            macro_buttons(),
         ]
-        .spacing(10)
-        .into()
+        .spacing(12);
+        column![section("Macros", list), section("Edit", editor.into()),]
+            .spacing(12)
+            .into()
     }
+}
+
+/// A rounded card used to group a section.
+fn card(_: &Theme) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(Color::from_rgb(0.12, 0.14, 0.17))),
+        border: Border {
+            radius: 10.0.into(),
+            width: 1.0,
+            color: Color::from_rgb(0.20, 0.23, 0.28),
+        },
+        ..container::Style::default()
+    }
+}
+
+/// A titled card.
+fn section<'a>(title: &'a str, body: Element<'a, Message>) -> Element<'a, Message> {
+    container(column![text(title).size(15), body].spacing(10))
+        .padding(14)
+        .style(card)
+        .into()
+}
+
+/// The Rainbow toggle row.
+fn rainbow_row(value: bool) -> Element<'static, Message> {
+    row![text("Rainbow"), toggler(value).on_toggle(Message::Rainbow)]
+        .spacing(8)
+        .into()
+}
+
+/// The lighting action buttons.
+fn light_buttons() -> Element<'static, Message> {
+    row![
+        button(text("Apply"))
+            .on_press(Message::ApplyLight)
+            .style(button::primary),
+        button(text("Backlight on")).on_press(Message::LightOn),
+        button(text("Backlight off")).on_press(Message::LightOff),
+    ]
+    .spacing(8)
+    .into()
+}
+
+/// The macro action buttons.
+fn macro_buttons() -> Element<'static, Message> {
+    row![
+        button(text("Set"))
+            .on_press(Message::MacroSet)
+            .style(button::primary),
+        button(text("Delete")).on_press(Message::MacroDelete),
+    ]
+    .spacing(8)
+    .into()
+}
+
+/// A small labelled field.
+fn labeled<'a>(label: &'a str, field: Element<'a, Message>) -> Element<'a, Message> {
+    column![text(label).size(12), field].spacing(4).into()
+}
+
+/// A key/value line for the Info tab.
+fn kv<'a>(key: &'a str, value: String) -> Element<'a, Message> {
+    row![
+        container(text(key).size(13)).width(Length::Fixed(90.0)),
+        text(value).size(14),
+    ]
+    .spacing(8)
+    .into()
 }
 
 impl Default for App {

@@ -205,9 +205,9 @@ impl LedParam {
     }
 
     fn payload(&self, flags: FlagsPair, wire_speed: u8) -> Result<[u8; 7]> {
-        // The LK67 reports brightness up to 5, wider than the documented 0..4,
-        // so the accepted range is 0..=5. **[HW]**
-        if self.brightness > 5 {
+        // The LK67 brightness is 0..=4; sending 5 blanks the LEDs, so it is
+        // rejected and reads of a stored 5 are clamped. **[HW]**
+        if self.brightness > 4 {
             return Err(Error::OutOfRange {
                 field: "brightness",
                 value: i64::from(self.brightness),
@@ -263,7 +263,9 @@ impl LedState {
         Some(Self {
             mode: reply[1],
             speed,
-            brightness: reply[3],
+            // A stored 5 means the LEDs are blank; clamp so a write-back keeps
+            // them lit. **[HW]**
+            brightness: reply[3].min(4),
             option,
             flags,
             rgb: [reply[5], reply[6], reply[7]],
@@ -380,7 +382,7 @@ mod tests {
         let s = LedState::from_reply(&reply).unwrap();
         assert_eq!(s.mode, 1);
         assert_eq!(s.speed, 1);
-        assert_eq!(s.brightness, 5);
+        assert_eq!(s.brightness, 4); // stored 5 (blank) clamps to 4
         assert_eq!(s.flags, 7);
         assert_eq!(s.rgb, [0x95, 0x07, 0xE1]);
         assert_eq!(s.preset, None);
@@ -392,11 +394,11 @@ mod tests {
     }
 
     #[test]
-    fn brightness_above_five_is_rejected() {
+    fn brightness_above_four_is_rejected() {
         let p = LedParam {
             mode: 1,
             speed: 0,
-            brightness: 6,
+            brightness: 5,
             option: 0,
             rainbow: false,
             rgb: [0, 0, 0],

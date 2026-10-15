@@ -120,8 +120,8 @@ byte 4 power save. **Read-modify-write** so unmodelled bits survive.
 ```
 
 - yc500 wire speed is 1..5: the host's 0..4 is **inverted** (host 0 → 5).
-- Brightness is direct. It is 0..4 on most boards but **0..5 on the LK67**
-  (the unit reports 5). **[HW]**
+- Brightness is direct, **0..4**. The LK67 stores 5 when the LEDs are blank;
+  sending 5 blanks them, so 5 is rejected and a stored 5 reads back as 4. **[HW]**
 - Flags nibble: for the LK67 the default pair is `7` = fixed colour,
   `8` = rainbow. This is per board; confirm by read-back before trusting it.
 - White `0xFFFFFF` transmits as `0xFAFAFA`; any colour below `0x080808`
@@ -222,8 +222,8 @@ committed fixtures are the real captures.
 - **Backlight SET works** and persists across re-enumeration (the setting is
   saved to onboard memory). Verified: set `wave #ff0000` brightness 3 speed 2
   direction 1, read back in a separate process, then restored.
-- **Brightness range is 0..5** on the LK67 (the unit reports brightness 5),
-  wider than the documented 0..4. **[HW]**
+- **Brightness is 0..4.** The unit reported a stored 5 (LEDs blank); sending 5
+  from the GUI blanked the lighting, so 5 is now rejected and clamped. **[HW]**
 - **Speed** is the host scale 0..4; the wire value is `5 - host` for the
   backlight and `host` for the edge light. The unit's original state was host
   speed 1 (wire 4).

@@ -44,7 +44,7 @@ pub struct LightArgs {
     /// Colour as `#RRGGBB` or `RRGGBB`.
     #[arg(long, value_parser = parse_color)]
     pub color: Option<[u8; 3]>,
-    /// Brightness, 0..5 (the LK67 reports up to 5).
+    /// Brightness, 0..4.
     #[arg(long)]
     pub brightness: Option<u8>,
     /// Speed, 0..4 (0 slowest). Inverted on the wire for the backlight.
@@ -171,9 +171,9 @@ pub(crate) fn merge(cur: &LedState, args: &LightArgs, edge: bool) -> Result<LedP
         None => cur.mode,
     };
     if let Some(b) = args.brightness
-        && b > 5
+        && b > 4
     {
-        bail!("brightness {b} is out of range (0..5)");
+        bail!("brightness {b} is out of range (0..4)");
     }
     if let Some(sp) = args.speed
         && sp > 4
