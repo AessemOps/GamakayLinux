@@ -103,7 +103,7 @@ Offsets are into the 64-byte report before the checksum byte.
 | keymap one slot | `0x13` | `0x89` | `[profile, slot]`, value at bytes 8..12; GET is raw pages `[profile, page]` |
 | Fn one slot | `0x15` | `0x90` | `[profile, slot]`, value at bytes 8..12; GET is raw pages |
 | keymap bulk | `0x09` | `0x89` | `[profile, 0xF8, 1, page]` + 56 bytes at 8, 9 pages, commit on page 8 |
-| macro | `0x16` | `0x8B` | one 56-byte page per report: `[slot, page, 56, last, 0, …]` |
+| macro | `0x0B` | `0x8B` | `[slot, 0, 1, page, 0, 0]` + 56 bytes at byte 8, five pages |
 | per-key colour | `0x0C` | `0x8C` | 7 × 56-byte pages of RGB triples in matrix order |
 | factory reset | `0x02` | — | bare opcode; the board needs ~4 s |
 
@@ -187,8 +187,8 @@ disabled rather than guessed.
 | identify / revision | yes **[HW]** | ? | ? |
 | info / options / debounce | yes **[HW]** | ? | ? |
 | lighting | yes **[HW]** | ? | ? |
-| keymap | yes **[HW]** | ? | ? |
-| macros | yes (Phase 4) | ? | ? |
+| keymap (base + Fn) | yes **[HW]** | ? | ? |
+| macros | yes **[HW]** | ? | ? |
 | battery | — (no command; receiver status only) | ? | ? |
 
 ## Phase 1 hardware findings (LK67, USB cable)
@@ -247,16 +247,67 @@ committed fixtures are the real captures.
   byte 8, nine pages, commit on page 8. Verified: read the layer, change one
   slot (CapsLock -> Esc), upload, read back, restore. Slots 126..127 never
   transmit (504 of 512 bytes), so they cannot be remapped.
-- **Fn layer read `0x90` echoes the request** (`90 00 <page> 00 …`) instead of
-  returning pages, so the Fn layer is not readable on this firmware and Fn
-  operations are withheld (`gamakay keymap --fn` refuses). **Open item:**
-  find the Fn read (another opcode, or a profile/sub-layer selector).
+- **Fn layer read `0x90`** did not return pages on the *pre-2026-10* firmware
+  (it echoed the request); the **2026-10 update fixed it** — see the firmware
+  section below. The Fn single write `0x15` is likewise ignored; the Fn bulk
+  write `0x10` works.
 - **Reset** is the factory reset `0x02`; it resets the whole keyboard, not one
   layer, so `gamakay keymap reset` requires `--yes`. Not exercised on
   hardware (destructive).
 - Writes use the same fire-and-forget + commit-pause flow as lighting; a
   multi-page write spaces its pages (`PAGE_GAP_MS`) and takes one commit pause
   at the end.
+
+## Phase 4 hardware findings (macros, USB cable)
+
+- **Macro write is `0x0B`**, the base-class value, not the reference's yc500
+  `0x16` (which this firmware ignores). Shape: header `[slot, 0, 1, page, 0,
+  0]`, 56 bytes at byte 8, **five** pages (0..4). Verified by a vendor capture
+  and then on hardware: write a slot, read it back, delete it.
+- **Macro reads** (`0x8B [slot, page]`, four raw pages) return the stored blob;
+  a vendor-written macro decodes cleanly, so the blob format is confirmed.
+- **Binding works** through the keymap: slot value `[0x09, mode, index, 0]`,
+  written with the bulk keymap upload `0x09`.
+
+## 2026-10 firmware update (LK67, USB cable)
+
+The board was updated to the latest firmware. It re-enumerates and behaves
+differently; the new state is the current baseline.
+
+| | pre-update | 2026-10 update |
+|---|---|---|
+| USB ids | `0461:4002` | **`3151:4003`** |
+| identify `0x8F` id | 149 | **290** |
+| revision `0x80` | 205 | **310** |
+| Fn read `0x90` | echoed the request | **returns pages** |
+| macro read `0x8B` | zeros (none stored) | **returns macros** |
+| macro write | `0x16` did not stick | **`0x0B` works** |
+
+- The identity (id) is firmware-dependent, so a record matches a set of ids
+  (`LK67` accepts 149 and 290); USB ids are only a hint.
+- **Fn layer now reads and writes.** Read `0x90` returns the same eight raw
+  pages as `0x89`; the Fn bulk write is `0x10` with the same shape as the base
+  bulk write `0x09` (`[profile, 0xF8, 1, page]` + 56 bytes at byte 8, nine
+  pages). Verified: read, change a slot (Grave -> F1), read back, restore.
+- **Macros now read.** `0x8B [slot, page]` returns the stored blob. A macro
+  written by the vendor tooling decodes cleanly, so the blob format is right.
+
+### Vendor capture (web driver, usbmon)
+
+The desktop app does not detect the board, but a WebHID **web driver** does.
+A host `usbmon` capture of that driver (scripts/capture-usb.sh) confirms the
+protocol is unchanged and shows the exact packets:
+
+- It uses the same opcodes: `0x8F`, `0x80`, `0x84`, `0x85`, `0x86`, `0x87`,
+  `0x91`, `0x92` reads, plus `0x07` lighting and `0x10` Fn bulk write.
+- **Fn bulk write** it sends is byte-for-byte our `write_layer` shape, which
+  is why the Fn write now round-trips.
+- **Lighting** it sends is our `[mode, wire_speed, brightness, (option<<4)|
+  flags, R, G, B]` with a Bit8 checksum.
+- **Macro write** it sends is `0x0B` (see Phase 4), which resolved the last
+  open item.
+- It sends one `0xFD` with a zero payload before the rest (purpose unknown;
+  not required — our reads and writes work without it).
 
 ## Provenance
 

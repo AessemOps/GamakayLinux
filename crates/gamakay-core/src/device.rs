@@ -28,8 +28,12 @@ impl Family {
 
 #[derive(Clone, Copy, Debug)]
 pub struct DeviceRecord {
-    /// Vendor table id, the value the `0x8F` handshake returns.
+    /// Vendor table id, the value the `0x8F` handshake returns for the
+    /// firmware this record was written against.
     pub id: u32,
+    /// Other firmware ids the same board reports (the id is firmware-version
+    /// dependent; the 2026-10 update moved the LK67 from 149 to 290).
+    pub alt_ids: &'static [u32],
     pub name: &'static str,
     pub display_name: &'static str,
     pub company: &'static str,
@@ -55,13 +59,16 @@ pub struct DeviceRecord {
 }
 
 /// The GamaKay LK67, wired USB. The only board this project targets and tests.
+/// A firmware update (2026-10) re-enumerated the board as `3151:4003`; older
+/// firmware was `0461:4002` (see [`LK67_LEGACY_USB`]).
 pub const LK67: DeviceRecord = DeviceRecord {
     id: 149,
+    alt_ids: &[290],
     name: "yzw_lk67",
     display_name: "LK67",
     company: "gamakay2",
-    vendor_id: 0x0461,
-    product_id: 0x4002,
+    vendor_id: 0x3151,
+    product_id: 0x4003,
     usage_page: 0x0001,
     usage: 0x0006,
     feature_report_byte_length: 65,
@@ -75,10 +82,15 @@ pub const LK67: DeviceRecord = DeviceRecord {
     keys: 67,
 };
 
+/// USB ids the LK67 used before the 2026-10 firmware update. `by_usb` matches
+/// these too, so a pre-update board is still recognised.
+pub const LK67_LEGACY_USB: &[(u16, u16)] = &[(0x0461, 0x4002)];
+
 /// A known sibling that shares the LK67's USB ids but is a different board.
 /// Present so a mis-identified handshake is caught rather than assumed.
 pub const YZ68: DeviceRecord = DeviceRecord {
     id: 244,
+    alt_ids: &[],
     name: "yzw_yz68_dm",
     display_name: "YZ68",
     company: "YUNZII",
@@ -103,16 +115,21 @@ pub const DEVICES: &[DeviceRecord] = &[LK67, YZ68];
 /// reports for the LK67. Seen in the wild as 71 instead of 149.
 pub const LK67_VARIANT_IDS: &[u32] = &[71];
 
-/// Look up a record by its numeric id.
+/// Look up a record by its numeric id (or one of its firmware alt ids).
 pub fn by_id(id: u32) -> Option<&'static DeviceRecord> {
-    DEVICES.iter().find(|d| d.id == id)
+    DEVICES
+        .iter()
+        .find(|d| d.id == id || d.alt_ids.contains(&id))
 }
 
 /// Candidate records sharing a USB id. Ambiguous by design.
 pub fn by_usb(vendor_id: u16, product_id: u16) -> Vec<&'static DeviceRecord> {
     DEVICES
         .iter()
-        .filter(|d| d.vendor_id == vendor_id && d.product_id == product_id)
+        .filter(|d| {
+            (d.vendor_id == vendor_id && d.product_id == product_id)
+                || (d.id == LK67.id && LK67_LEGACY_USB.contains(&(vendor_id, product_id)))
+        })
         .collect()
 }
 
@@ -138,10 +155,11 @@ mod tests {
     }
 
     #[test]
-    fn usb_ids_are_ambiguous() {
-        // 0x0461:0x4002 is the same pair as 1121:16386 in decimal, and the
-        // LK67 and YZ68 share it: USB ids are only a hint, never an identity.
-        assert_eq!(by_usb(0x0461, 0x4002).len(), 2);
-        assert_eq!(by_usb(1121, 16386).len(), 2);
+    fn usb_ids_match_current_and_legacy() {
+        // Current firmware id.
+        assert_eq!(by_usb(0x3151, 0x4003).len(), 1);
+        // The pre-update id still resolves to the LK67 (and, in decimal, is
+        // also the YZ68's id).
+        assert!(by_usb(0x0461, 0x4002).iter().any(|d| d.id == LK67.id));
     }
 }

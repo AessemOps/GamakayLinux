@@ -65,6 +65,9 @@ gamakay light set --mode wave --color ff0000 --brightness 3 --speed 2
 gamakay apply ~/.config/gamakay/profiles/<name>.toml
 gamakay keymap get               # dump the base layer
 gamakay keymap set --key CapsLock --to Esc
+gamakay macro list               # onboard macros
+gamakay macro set 0 --repeat 1 --steps "A+@20, A-@20"
+gamakay keymap set --slot 20 --to macro:0   # bind macro 0 to a key
 ```
 
 ## Workflow
@@ -133,14 +136,16 @@ gamakay keymap set --key CapsLock --to Esc
 
 ## Environment facts
 
-- Test board: GamaKay LK67, wired USB `0461:4002`, two interfaces. The
-  settings node is `hidraw0` (usage page `0x0001`, usage `0x0006`, 64-byte
-  feature report); `hidraw1` has no feature report and is unused.
-- Identity is the `0x8F` handshake id (LK67 = **149**; the mismatched-firmware
-  variant reports **71** and writes are refused without `--force`). Never
-  identify by VID/PID: hundreds of boards share `1121:4002` / `3151:4002`.
+- Test board: GamaKay LK67. The 2026-10 firmware re-enumerated it as wired USB
+  `3151:4003` (pre-update: `0461:4002`). The settings node is `hidraw0` (usage
+  page `0x0001`, usage `0x0006`, 64-byte feature report); `hidraw1` has no
+  feature report and is unused.
+- Identity is the `0x8F` handshake id, which is firmware-dependent: the LK67
+  reports **290** on the 2026-10 firmware and **149** before it (the
+  mismatched-firmware variant reports **71**). Never identify by VID/PID:
+  hundreds of boards share `1121:4002` / `3151:4002`.
 - The 2.4 GHz dongle VID/PID and the Bluetooth HID descriptor are **open
   items**; do not assume a dongle relays every command. Bluetooth HOGP reaches
   us as hidraw through `uhid`.
 - `/dev/hidraw*` is root-only by default; `make udev-install` grants the
-  active user access via `TAG+="uaccess"`.
+  active user access via `TAG+="uaccess"` (the rule covers both USB ids).

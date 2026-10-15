@@ -6,7 +6,9 @@
 # then replug the keyboard. `gamakay info` runs as your normal user.
 
 # Wired USB. The LK67 enumerates two interfaces; this matches the settings one
-# (usage page 1 / usage 6, the 64-byte vendor feature report).
+# (usage page 1 / usage 6, the 64-byte vendor feature report). 3151:4003 is the
+# current firmware; 0461:4002 is the pre-2026-10 id.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3151", ATTRS{idProduct}=="4003", TAG+="uaccess"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0461", ATTRS{idProduct}=="4002", TAG+="uaccess"
 
 # Bluetooth HOGP is surfaced through uhid under the adapter's USB ids, so match

@@ -6,6 +6,7 @@
 
 mod keymap;
 mod light;
+mod macros;
 mod profile;
 
 use std::path::PathBuf;
@@ -64,6 +65,11 @@ enum Command {
         #[command(subcommand)]
         action: keymap::KeymapCmd,
     },
+    /// List, write and clear onboard macros.
+    Macro {
+        #[command(subcommand)]
+        action: macros::MacroCmd,
+    },
 }
 
 fn main() {
@@ -74,6 +80,7 @@ fn main() {
         Command::Light { action } => light::run(&cli, action.as_ref()),
         Command::Apply { profile } => profile::run(&cli, profile),
         Command::Keymap { action } => keymap::run(&cli, action),
+        Command::Macro { action } => macros::run(&cli, action),
     };
     if let Err(e) = result {
         let text = format!("{e:#}");

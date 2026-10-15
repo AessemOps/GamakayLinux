@@ -74,7 +74,6 @@ fn active_profile(s: &mut Session<'_>, requested: Option<u8>) -> u8 {
 }
 
 fn get(cli: &Cli, args: &GetArgs) -> Result<()> {
-    require_base(args.fn_layer)?;
     let info = select_device(cli)?;
     let mut dev = HidrawDevice::open(&info.path)?;
     let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
@@ -99,7 +98,6 @@ fn get(cli: &Cli, args: &GetArgs) -> Result<()> {
 }
 
 fn set(cli: &Cli, args: &SetArgs) -> Result<()> {
-    require_base(args.fn_layer)?;
     let info = select_device(cli)?;
     let mut dev = HidrawDevice::open(&info.path)?;
     let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
@@ -126,18 +124,6 @@ fn set(cli: &Cli, args: &SetArgs) -> Result<()> {
         }
     } else {
         println!("slot {slot} -> {}", new.describe());
-    }
-    Ok(())
-}
-
-/// The Fn layer read (`0x90`) echoes the request on the LK67's firmware rather
-/// than returning pages, so Fn operations are withheld until that is resolved.
-fn require_base(fn_layer: bool) -> Result<()> {
-    if fn_layer {
-        bail!(
-            "the Fn layer is not readable on this firmware (0x90 echoes the request); \
-             base-layer operations only for now — see docs/protocol.md"
-        );
     }
     Ok(())
 }
@@ -172,8 +158,25 @@ pub(crate) fn parse_bind(s: &str) -> Result<SlotValue> {
             .with_context(|| format!("bad consumer usage {rest:?}"))?;
         return Ok(SlotValue::Consumer(c));
     }
+    if let Some(rest) = t.strip_prefix("macro:") {
+        let (idx, mode) = match rest.split_once(':') {
+            Some((i, m)) => (i.trim(), parse_macro_mode(m.trim())?),
+            None => (rest.trim(), 0u8),
+        };
+        let index: u8 = idx.parse().context("macro index (0..49)")?;
+        return Ok(SlotValue::Macro { mode, index });
+    }
     match keycode::usage(t) {
         Some(u) => Ok(SlotValue::Hid(u)),
         None => bail!("unknown key {t:?} (a name like A, Esc, F5, or 0xNN)"),
+    }
+}
+
+fn parse_macro_mode(s: &str) -> Result<u8> {
+    match s.to_ascii_lowercase().as_str() {
+        "repeat" => Ok(0),
+        "toggle" => Ok(1),
+        "hold" => Ok(2),
+        other => other.parse().context("macro mode (repeat, toggle, hold)"),
     }
 }
