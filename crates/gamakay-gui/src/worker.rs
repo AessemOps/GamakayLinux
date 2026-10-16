@@ -250,7 +250,11 @@ impl Worker {
             self.emit(Event::Layer {
                 fn_layer,
                 slots: layer_slots(&km),
-                locked: self.fn_locked.to_vec(),
+                locked: if fn_layer {
+                    self.fn_locked.to_vec()
+                } else {
+                    Vec::new()
+                },
             });
         }
     }
@@ -316,7 +320,11 @@ impl Worker {
                     self.emit(Event::Layer {
                         fn_layer,
                         slots: layer_slots(&km),
-                        locked: self.fn_locked.to_vec(),
+                        locked: if fn_layer {
+                            self.fn_locked.to_vec()
+                        } else {
+                            Vec::new()
+                        },
                     });
                     self.emit(Event::Status(format!("slot {slot} updated")));
                     return;

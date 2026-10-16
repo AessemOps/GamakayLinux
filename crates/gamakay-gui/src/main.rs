@@ -102,6 +102,9 @@ struct App {
     profile: u8,
     /// Slots the firmware runs itself, which the Fn layer shows in red.
     locked: HashSet<u8>,
+    /// Which layer `bindings`/`locked` belong to. Kept in step with them, so a
+    /// toggle never shows one layer's symbols with the other's locked set.
+    shown_fn: bool,
     // Macro editor.
     macros: Vec<(u8, String)>,
     macro_slot: String,
@@ -176,6 +179,7 @@ impl App {
             layers: 1,
             profile: 0,
             locked: HashSet::new(),
+            shown_fn: false,
             macros: Vec::new(),
             macro_slot: "0".into(),
             macro_steps: "A+@20, A-@20".into(),
@@ -204,12 +208,13 @@ impl App {
             Message::LightOff => self.send(Request::SetBacklightOff(true)),
             Message::FnLayer(fn_layer) => {
                 self.fn_layer = fn_layer;
-                // The other layer has different bindings, so drop anything
-                // pending for the one being left: a stale preview would draw
-                // its symbol on the wrong layer.
+                // Drop anything pending for the layer being left: a stale
+                // preview would draw its symbol on the wrong layer. The
+                // bindings and the locked set stay as they are until the read
+                // comes back, so the canvas never shows one layer's symbols
+                // with the other's red keys.
                 self.preview = None;
                 self.selected = None;
-                self.locked.clear();
                 self.send(Request::Refresh);
             }
             Message::SwitchLayer(profile) => {
@@ -273,6 +278,7 @@ impl App {
                     self.bindings = slots.iter().cloned().collect();
                     self.layer = slots;
                     self.locked = locked.into_iter().collect();
+                    self.shown_fn = fn_layer;
                 }
             }
             Event::Macros(m) => self.macros = m,
@@ -638,7 +644,7 @@ impl App {
             selected: self.selected,
             preview: self.preview.clone(),
             locked: &self.locked,
-            fn_layer: self.fn_layer,
+            fn_layer: self.shown_fn,
             lighting: None,
         });
         let hint = match self.selected {
