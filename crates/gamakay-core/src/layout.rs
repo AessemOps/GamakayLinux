@@ -101,7 +101,7 @@ pub const LK67_LAYOUT: &[LayoutKey] = &[
     LayoutKey::k("/", 70, 11.25, 3.0, 1.25),
     LayoutKey::k("Shift", 76, 12.5, 3.0, 1.25),
     LayoutKey::k("PgDn", 87, 16.0, 3.0, 1.0),
-    LayoutKey::k("Up", 82, 14.75, 3.0, 1.0),
+    LayoutKey::k("Up", 82, 15.0, 3.0, 1.0),
     // Row 4.
     LayoutKey::k("Ctrl", 5, 0.0, 4.0, 1.25),
     LayoutKey::k("Win", 11, 1.25, 4.0, 1.25),
@@ -110,9 +110,9 @@ pub const LK67_LAYOUT: &[LayoutKey] = &[
     LayoutKey::k("Alt", 65, 10.0, 4.0, 1.25),
     LayoutKey::k("Fn", 71, 11.25, 4.0, 1.25),
     LayoutKey::k("Ctrl", 77, 12.5, 4.0, 1.25),
-    LayoutKey::k("Left", 83, 13.75, 4.0, 1.0),
-    LayoutKey::k("Down", 88, 14.75, 4.0, 1.0),
-    LayoutKey::k("Right", 89, 15.75, 4.0, 1.0),
+    LayoutKey::k("Left", 83, 14.0, 4.0, 1.0),
+    LayoutKey::k("Down", 88, 15.0, 4.0, 1.0),
+    LayoutKey::k("Right", 89, 16.0, 4.0, 1.0),
     // The rotary knob (decorative).
     LayoutKey {
         label: "",

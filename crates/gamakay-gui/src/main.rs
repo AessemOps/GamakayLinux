@@ -416,8 +416,12 @@ impl App {
     }
 
     /// The lighting preview as a grid of coloured key widgets (a canvas would
-    /// be cached by the renderer and would not animate). Horizontal gaps are
-    /// reproduced so the layout matches the board.
+    /// be cached by the renderer and would not animate).
+    ///
+    /// Each key sits in a cell exactly `w * unit` wide, with the coloured key
+    /// inset by `pad`; positions are therefore exact and every row's right
+    /// column lines up. A `row`-level spacing would accumulate per cell and
+    /// drift the right column of rows that hold more keys.
     fn preview_grid(&self, mode_code: u8, rgb: [u8; 3]) -> Element<'_, Message> {
         let p = patterns::Params {
             mode: mode_code,
@@ -446,35 +450,45 @@ impl App {
                 for k in keys {
                     let gap = k.x - prev_end;
                     if gap > 0.05 {
-                        cells.push(container(text(" ")).width(Length::Fixed(gap * unit)).into());
+                        cells.push(
+                            container(text(" "))
+                                .width(Length::Fixed(gap * unit))
+                                .height(Length::Fixed(unit))
+                                .into(),
+                        );
                     }
                     let x = (k.x + k.w / 2.0) / LK67_WIDTH;
                     let y = (k.y + k.h / 2.0) / LK67_HEIGHT;
                     let c = patterns::color_at(&p, x, y, k.slot as usize, frame);
-                    let radius = if k.knob { unit / 2.0 } else { 5.0 };
+                    let radius = if k.knob { (unit - pad) / 2.0 } else { 5.0 };
+                    let key = container(text(k.label).size(11))
+                        .width(Length::Fixed(k.w * unit - pad))
+                        .height(Length::Fixed(unit - pad))
+                        .align_x(iced::Alignment::Center)
+                        .align_y(iced::Alignment::Center)
+                        .style(move |_: &Theme| container::Style {
+                            background: Some(Background::Color(c)),
+                            border: Border {
+                                radius: radius.into(),
+                                width: 0.0,
+                                color: Color::TRANSPARENT,
+                            },
+                            ..container::Style::default()
+                        });
                     cells.push(
-                        container(text(k.label).size(11))
-                            .width(Length::Fixed(k.w * unit - pad))
-                            .height(Length::Fixed(unit - pad))
+                        container(key)
+                            .width(Length::Fixed(k.w * unit))
+                            .height(Length::Fixed(unit))
                             .align_x(iced::Alignment::Center)
                             .align_y(iced::Alignment::Center)
-                            .style(move |_: &Theme| container::Style {
-                                background: Some(Background::Color(c)),
-                                border: Border {
-                                    radius: radius.into(),
-                                    width: 0.0,
-                                    color: Color::TRANSPARENT,
-                                },
-                                ..container::Style::default()
-                            })
                             .into(),
                     );
                     prev_end = k.x + k.w;
                 }
-                Element::from(row(cells).spacing(2.0))
+                Element::from(row(cells))
             })
             .collect();
-        column(rows_el).spacing(pad).into()
+        column(rows_el).into()
     }
 
     fn view_lighting(&self) -> Element<'_, Message> {
