@@ -112,8 +112,13 @@ loop, colour grid, snowfall, meteor, silent snow). The mode animations are
 `docs/protocol.md`), not byte-exact; the reactive modes (key shadow, and modes
 that spawn on a key press) show their idle state. All device I/O runs on a
 worker thread, so the window never blocks, and the animation only runs on the
-Lighting tab. `gamakay-gui lighting` (or `keymap`/`macros`/`info`) opens on a
-given tab.
+Lighting tab. The Macros tab has a **recorder**: press Record, type the macro on
+the keyboard, press Stop, then save it to one of the 50 onboard slots (the slot
+list shows what each slot holds). Each keystroke becomes a press/release event
+carrying the pause before it, so the take reproduces your typing rhythm; a key
+still held when recording stops is released, a key the board cannot send is
+skipped, and the take is stopped before it outgrows the 256-byte slot.
+`gamakay-gui lighting` (or `keymap`/`macros`/`info`) opens on a given tab.
 
 ```bash
 gamakay-gui              # opens on the Info tab

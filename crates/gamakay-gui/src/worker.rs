@@ -10,7 +10,7 @@ use gamakay_core::error::Error as CoreError;
 use gamakay_core::guard::Guard;
 use gamakay_core::keymap::{Keymap, Slot, SlotValue};
 use gamakay_core::light::{LK67_FLAGS, LedParam, LedState, Mode};
-use gamakay_core::macros::{MACRO_SLOTS, Macro, describe, parse_steps};
+use gamakay_core::macros::{MACRO_SLOTS, Macro, MacroEvent, describe};
 use gamakay_core::transport::Session;
 use gamakay_hidraw::{HidrawDevice, HidrawInfo};
 
@@ -34,7 +34,7 @@ pub enum Request {
     SetMacro {
         slot: u8,
         repeat: u16,
-        steps: String,
+        events: Vec<MacroEvent>,
     },
     DeleteMacro(u8),
 }
@@ -86,6 +86,9 @@ struct Worker {
     device: Option<(HidrawDevice, HidrawInfo)>,
     /// Fn-layer slots the firmware drives (from the identified record).
     fn_locked: &'static [u8],
+    /// The macros read from the board, kept so a write can update the list
+    /// without re-reading all 50 slots (200 feature transfers).
+    macros: Vec<(u8, String)>,
 }
 
 impl Worker {
@@ -94,6 +97,7 @@ impl Worker {
             events,
             device: None,
             fn_locked: &[],
+            macros: Vec::new(),
         }
     }
 
@@ -122,8 +126,8 @@ impl Worker {
                 Request::SetMacro {
                     slot,
                     repeat,
-                    steps,
-                } => self.set_macro(slot, repeat, &steps),
+                    events,
+                } => self.set_macro(slot, repeat, events),
                 Request::DeleteMacro(slot) => self.delete_macro(slot),
             }
         }
@@ -272,7 +276,20 @@ impl Worker {
                 }
             }
         }
-        self.emit(Event::Macros(out));
+        self.macros = out;
+        self.emit(Event::Macros(self.macros.clone()));
+    }
+
+    /// Record `slot`'s new contents in the cached list and hand it to the UI.
+    /// The write is fire-and-forget, so the list is updated from what was sent
+    /// rather than by re-reading every slot.
+    fn set_macro_in_list(&mut self, slot: u8, value: Option<String>) {
+        self.macros.retain(|(s, _)| *s != slot);
+        if let Some(desc) = value {
+            self.macros.push((slot, desc));
+            self.macros.sort_by_key(|(s, _)| *s);
+        }
+        self.emit(Event::Macros(self.macros.clone()));
     }
 
     fn set_backlight(&mut self, p: &LedParam) {
@@ -339,27 +356,25 @@ impl Worker {
         }
     }
 
-    fn set_macro(&mut self, slot: u8, repeat: u16, steps: &str) {
-        let events = match parse_steps(steps) {
-            Ok(e) => e,
-            Err(e) => {
-                self.emit(Event::Error(format!("steps: {e}")));
-                return;
-            }
-        };
+    fn set_macro(&mut self, slot: u8, repeat: u16, events: Vec<MacroEvent>) {
         let m = Macro { repeat, events };
-        let ok = self.with_session(|s| s.write_macro(slot, &m)).is_some();
-        if ok {
-            self.emit(Event::Status(format!("macro {slot} written")));
-            self.read_macros();
+        // Refuse an oversize take before touching the board: a macro that does
+        // not fit must never be half-written into the slot.
+        if let Err(e) = m.to_blob() {
+            self.emit(Event::Error(format!("macro: {e}")));
+            return;
+        }
+        let desc = describe(&m);
+        if self.with_session(|s| s.write_macro(slot, &m)).is_some() {
+            self.set_macro_in_list(slot, Some(desc));
+            self.emit(Event::Status(format!("macro {} written", slot + 1)));
         }
     }
 
     fn delete_macro(&mut self, slot: u8) {
-        let ok = self.with_session(|s| s.delete_macro(slot)).is_some();
-        if ok {
-            self.emit(Event::Status(format!("macro {slot} cleared")));
-            self.read_macros();
+        if self.with_session(|s| s.delete_macro(slot)).is_some() {
+            self.set_macro_in_list(slot, None);
+            self.emit(Event::Status(format!("macro {} cleared", slot + 1)));
         }
     }
 }

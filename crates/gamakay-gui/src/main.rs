@@ -10,12 +10,14 @@ mod glyph;
 mod keypicker;
 mod patterns;
 mod physical;
+mod recorder;
 mod worker;
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Mutex;
+use std::time::Instant;
 
 use iced::futures::channel::mpsc::{UnboundedReceiver, unbounded};
 use iced::widget::{
@@ -24,9 +26,11 @@ use iced::widget::{
 };
 use iced::{Background, Border, Color, Element, Length, Subscription, Theme};
 
+use gamakay_core::keycode;
 use gamakay_core::keymap::{Slot, SlotValue};
 use gamakay_core::layout::{LK67_HEIGHT, LK67_LAYOUT, LK67_WIDTH, LayoutKey};
 use gamakay_core::light::{LK67_FLAGS, LedParam, LedState, Mode};
+use gamakay_core::macros::{MACRO_SLOTS, MACRO_STREAM_MAX, MacroEvent};
 use worker::{Event, Request, Summary};
 
 /// The worker's event receiver, handed to the subscription once.
@@ -106,10 +110,29 @@ struct App {
     /// toggle never shows one layer's symbols with the other's locked set.
     shown_fn: bool,
     // Macro editor.
+    /// The stored macros, as `(slot, description)`.
     macros: Vec<(u8, String)>,
-    macro_slot: String,
-    macro_steps: String,
+    /// The slot the recorder writes to.
+    macro_slot: u8,
     macro_repeat: String,
+    /// The take being recorded.
+    recorder: recorder::Recorder,
+    /// Shown under the recorder when saving is refused.
+    macro_note: String,
+}
+
+/// One entry of the slot picker: its index and a label naming what the slot
+/// holds, so an occupied slot is visible in the list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SlotChoice {
+    index: u8,
+    label: String,
+}
+
+impl std::fmt::Display for SlotChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.label)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -139,10 +162,29 @@ enum Message {
     Capture(iced::keyboard::key::Physical),
     PickColor(f32, f32),
     Tick,
-    MacroSlot(String),
-    MacroSteps(String),
+    /// The recorder's slot changed.
+    MacroSlotPick(SlotChoice),
     MacroRepeat(String),
-    MacroSet,
+    /// Arm the recorder: the next keystrokes become the macro.
+    RecordStart,
+    /// Stop and close out the take.
+    RecordStop,
+    /// A key went down while recording, with the usage its physical position
+    /// maps to (`None` when the board cannot send that key).
+    RecordDown {
+        usage: Option<u8>,
+        key: iced::keyboard::Key,
+        location: iced::keyboard::Location,
+    },
+    /// A key came up while recording.
+    RecordUp {
+        key: iced::keyboard::Key,
+        location: iced::keyboard::Location,
+    },
+    /// Discard the take.
+    RecordClear,
+    /// Write the take into the selected slot.
+    MacroSave,
     MacroDelete,
 }
 
@@ -181,9 +223,10 @@ impl App {
             locked: HashSet::new(),
             shown_fn: false,
             macros: Vec::new(),
-            macro_slot: "0".into(),
-            macro_steps: "A+@20, A-@20".into(),
+            macro_slot: 0,
             macro_repeat: "1".into(),
+            recorder: recorder::Recorder::default(),
+            macro_note: String::new(),
         };
         let _ = app.req.send(Request::Connect);
         app
@@ -244,11 +287,25 @@ impl App {
                     .unwrap_or_else(|| "-".into());
                 self.preview = None;
             }
-            Message::MacroSlot(s) => self.macro_slot = s,
-            Message::MacroSteps(s) => self.macro_steps = s,
+            Message::MacroSlotPick(c) => self.macro_slot = c.index,
             Message::MacroRepeat(s) => self.macro_repeat = s,
-            Message::MacroSet => self.set_macro(),
-            Message::MacroDelete => self.delete_macro(),
+            Message::RecordStart => {
+                self.macro_note.clear();
+                self.recorder.start(Instant::now());
+            }
+            Message::RecordStop => self.recorder.stop(Instant::now()),
+            Message::RecordDown {
+                usage,
+                key,
+                location,
+            } => self.recorder.down(usage, &key, location, Instant::now()),
+            Message::RecordUp { key, location } => self.recorder.up(&key, location, Instant::now()),
+            Message::RecordClear => {
+                self.macro_note.clear();
+                self.recorder.clear();
+            }
+            Message::MacroSave => self.macro_save(),
+            Message::MacroDelete => self.macro_delete(),
         }
     }
 
@@ -339,19 +396,46 @@ impl App {
         });
     }
 
-    fn set_macro(&mut self) {
-        let slot = self.macro_slot.trim().parse::<u8>().unwrap_or(0);
-        let repeat = self.macro_repeat.trim().parse::<u16>().unwrap_or(1);
+    /// Write the take into the selected slot.
+    fn macro_save(&mut self) {
+        if self.recorder.is_recording() {
+            self.recorder.stop(Instant::now());
+        }
+        let events = self.recorder.events().to_vec();
+        if events.is_empty() {
+            self.macro_note = "record something first".into();
+            return;
+        }
+        let repeat = self.macro_repeat.trim().parse::<u16>().unwrap_or(1).max(1);
+        self.macro_note.clear();
         self.send(Request::SetMacro {
-            slot,
+            slot: self.macro_slot,
             repeat,
-            steps: self.macro_steps.clone(),
+            events,
         });
     }
 
-    fn delete_macro(&mut self) {
-        let slot = self.macro_slot.trim().parse::<u8>().unwrap_or(0);
-        self.send(Request::DeleteMacro(slot));
+    fn macro_delete(&mut self) {
+        self.send(Request::DeleteMacro(self.macro_slot));
+    }
+
+    /// The slot picker's entries, each labelled with what the slot holds.
+    fn slot_choices(&self) -> Vec<SlotChoice> {
+        let stored: HashMap<u8, &str> = self
+            .macros
+            .iter()
+            .map(|(slot, desc)| (*slot, desc.as_str()))
+            .collect();
+        (0..MACRO_SLOTS)
+            .map(|i| SlotChoice {
+                index: i,
+                label: format!(
+                    "Macro {:>2}  ·  {}",
+                    i + 1,
+                    shorten(stored.get(&i).copied().unwrap_or("empty"), 64)
+                ),
+            })
+            .collect()
     }
 
     fn subscription(&self) -> Subscription<Message> {
@@ -365,6 +449,10 @@ impl App {
         // it — the VIA "press a key" flow.
         if self.tab == Tab::Keymap && self.selected.is_some() {
             subs.push(iced::event::listen_with(capture_key));
+        }
+        // While the recorder is armed every keystroke becomes a macro event.
+        if self.recorder.is_recording() {
+            subs.push(iced::event::listen_with(record_key));
         }
         Subscription::batch(subs)
     }
@@ -735,48 +823,117 @@ impl App {
     }
 
     fn view_macros(&self) -> Element<'_, Message> {
-        let list: Element<Message> = if self.macros.is_empty() {
-            text("No macros stored.").into()
+        let stored: Element<Message> = if self.macros.is_empty() {
+            text("No macros stored.").size(12).into()
         } else {
-            column(
-                self.macros
-                    .iter()
-                    .map(|(slot, desc)| Element::from(text(format!("macro {slot:>2}   {desc}")))),
-            )
+            column(self.macros.iter().map(|(slot, desc)| {
+                Element::from(text(format!("Macro {:>2}   {desc}", slot + 1)).size(12))
+            }))
             .spacing(2)
             .into()
         };
-        let editor = column![
-            row![
-                labeled(
-                    "Slot",
-                    text_input("0", &self.macro_slot)
-                        .on_input(Message::MacroSlot)
-                        .into()
-                ),
-                labeled(
-                    "Repeat",
-                    text_input("1", &self.macro_repeat)
-                        .on_input(Message::MacroRepeat)
-                        .into()
-                ),
-            ]
-            .spacing(12),
+
+        let choices = self.slot_choices();
+        let selected = choices.get(self.macro_slot as usize).cloned();
+        let meta = row![
             labeled(
-                "Steps",
-                text_input("A+@20, A-@20", &self.macro_steps)
-                    .on_input(Message::MacroSteps)
+                "Slot",
+                pick_list(choices, selected, Message::MacroSlotPick)
+                    .width(Length::Fixed(360.0))
                     .into()
             ),
-            macro_buttons(),
+            labeled(
+                "Repeat",
+                text_input("1", &self.macro_repeat)
+                    .on_input(Message::MacroRepeat)
+                    .width(Length::Fixed(64.0))
+                    .into()
+            ),
         ]
-        .spacing(12);
+        .spacing(16)
+        .align_y(iced::Alignment::End);
+
+        let record: Element<Message> = if self.recorder.is_recording() {
+            button(text("■  Stop"))
+                .on_press(Message::RecordStop)
+                .style(danger_button)
+                .into()
+        } else {
+            button(text("●  Record"))
+                .on_press(Message::RecordStart)
+                .style(button::primary)
+                .into()
+        };
+        let buttons = row![
+            record,
+            button(text("Clear")).on_press(Message::RecordClear),
+            horizontal_space(),
+            button(text(format!("Save to macro {}", self.macro_slot + 1)))
+                .on_press(Message::MacroSave)
+                .style(button::primary),
+            button(text(format!("Delete macro {}", self.macro_slot + 1)))
+                .on_press(Message::MacroDelete)
+                .style(danger_button),
+        ]
+        .spacing(8)
+        .align_y(iced::Alignment::Center);
+
+        let events: Element<Message> = if self.recorder.events().is_empty() {
+            text(if self.recorder.is_recording() {
+                "Press the keys of the macro, in order…"
+            } else {
+                "Press Record, then type the macro on the keyboard."
+            })
+            .size(12)
+            .into()
+        } else {
+            scrollable(
+                column(
+                    self.recorder
+                        .events()
+                        .iter()
+                        .enumerate()
+                        .map(|(i, e)| macro_event_row(i, e)),
+                )
+                .spacing(2),
+            )
+            .height(Length::Fixed(200.0))
+            .into()
+        };
+
+        let recorder = column![meta, buttons, text(self.macro_help()).size(12), events].spacing(10);
+
         column![
-            section("Macros".to_string(), list),
-            section("Edit".to_string(), editor.into()),
+            section("Recorded macros".to_string(), stored),
+            section("Recorder".to_string(), recorder.into()),
         ]
         .spacing(12)
         .into()
+    }
+
+    /// The line under the recorder: a refusal (a full slot, an unsendable key)
+    /// wins over the running count.
+    fn macro_help(&self) -> String {
+        if !self.macro_note.is_empty() {
+            return self.macro_note.clone();
+        }
+        if !self.recorder.note().is_empty() {
+            return self.recorder.note().to_string();
+        }
+        let used = self.recorder.used_bytes();
+        if self.recorder.is_recording() {
+            return format!(
+                "recording — {} events, {used} bytes",
+                self.recorder.events().len()
+            );
+        }
+        if self.recorder.events().is_empty() {
+            return String::new();
+        }
+        format!(
+            "{} events, {used} of {MACRO_STREAM_MAX} bytes",
+            self.recorder.events().len()
+        )
     }
 }
 
@@ -974,16 +1131,98 @@ fn light_buttons() -> Element<'static, Message> {
     .into()
 }
 
-/// The macro action buttons.
-fn macro_buttons() -> Element<'static, Message> {
+/// Map a key press/release into a recorder message. Unlike [`capture_key`]
+/// this takes events whatever their status: while recording, every keystroke is
+/// an event, and nothing on the tab should be eating them.
+fn record_key(
+    event: iced::Event,
+    _status: iced::event::Status,
+    _window: iced::window::Id,
+) -> Option<Message> {
+    match event {
+        iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+            physical_key,
+            key,
+            location,
+            ..
+        }) => Some(Message::RecordDown {
+            usage: physical::usage(&physical_key),
+            key,
+            location,
+        }),
+        iced::Event::Keyboard(iced::keyboard::Event::KeyReleased { key, location, .. }) => {
+            Some(Message::RecordUp { key, location })
+        }
+        _ => None,
+    }
+}
+
+/// One line of the recorded take: its place in the sequence, the key, whether
+/// it goes down or up, and the pause it carries.
+fn macro_event_row<'a>(i: usize, event: &MacroEvent) -> Element<'a, Message> {
+    let (name, what, delay_ms) = match *event {
+        MacroEvent::Key {
+            usage,
+            pressed,
+            delay_ms,
+        } => (
+            keycode::name(usage)
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("0x{usage:02X}")),
+            if pressed { "down" } else { "up" },
+            delay_ms,
+        ),
+        MacroEvent::MouseButton {
+            button,
+            pressed,
+            delay_ms,
+        } => (
+            format!("Mouse {button}"),
+            if pressed { "down" } else { "up" },
+            delay_ms,
+        ),
+        MacroEvent::MouseMove { dx, dy, delay_ms } => {
+            (format!("Move {dx}, {dy}"), "move", u16::from(delay_ms))
+        }
+    };
     row![
-        button(text("Set"))
-            .on_press(Message::MacroSet)
-            .style(button::primary),
-        button(text("Delete")).on_press(Message::MacroDelete),
+        container(text(format!("{:>2}", i + 1)).size(11)).width(Length::Fixed(28.0)),
+        container(text(name).size(12)).width(Length::Fixed(120.0)),
+        container(text(what).size(11)).width(Length::Fixed(46.0)),
+        text(format!("{delay_ms} ms")).size(11),
     ]
     .spacing(8)
+    .align_y(iced::Alignment::Center)
     .into()
+}
+
+/// Truncate a label to `max` characters, on a character boundary.
+fn shorten(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(max.saturating_sub(1)).collect();
+    out.push('…');
+    out
+}
+
+/// A destructive button.
+fn danger_button(_: &Theme, status: button::Status) -> button::Style {
+    let hovered = matches!(status, button::Status::Hovered | button::Status::Pressed);
+    button::Style {
+        background: Some(Background::Color(if hovered {
+            Color::from_rgb(0.66, 0.27, 0.30)
+        } else {
+            Color::from_rgb(0.52, 0.21, 0.24)
+        })),
+        text_color: Color::from_rgb(0.98, 0.94, 0.94),
+        border: Border {
+            radius: 6.0.into(),
+            width: 0.0,
+            color: Color::TRANSPARENT,
+        },
+        ..button::Style::default()
+    }
 }
 
 /// A small labelled field.

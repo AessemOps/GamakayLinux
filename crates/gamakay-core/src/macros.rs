@@ -22,6 +22,9 @@ pub const MACRO_PAGE_DATA: usize = 56;
 pub const MACRO_PAGES: u8 = 4;
 /// Pages a macro write sends: 5 x 56 (>= 256 bytes).
 pub const MACRO_WRITE_PAGES: u8 = 5;
+/// Bytes the event stream may occupy: the blob less the two repeat bytes and
+/// the four-byte terminator.
+pub const MACRO_STREAM_MAX: usize = MACRO_BYTES - 6;
 
 const MOUSE_BTN_BASE: u8 = 0xF0; // ..=0xF4: left, right, middle, back, forward
 const MOUSE_MOVE: u8 = 0xF9;
@@ -54,9 +57,27 @@ pub struct Macro {
     pub events: Vec<MacroEvent>,
 }
 
+impl MacroEvent {
+    /// Bytes this event adds to the stream: four for a mouse move, two for a
+    /// press whose delay fits the short form, otherwise four.
+    pub fn encoded_len(&self) -> usize {
+        match *self {
+            MacroEvent::MouseMove { .. } => 4,
+            MacroEvent::Key { delay_ms, .. } | MacroEvent::MouseButton { delay_ms, .. } => {
+                if (1..=127).contains(&delay_ms) { 2 } else { 4 }
+            }
+        }
+    }
+}
+
 impl Macro {
     pub fn is_empty(&self) -> bool {
         self.events.is_empty()
+    }
+
+    /// Bytes the stream occupies, which is what the 256-byte blob limits.
+    pub fn stream_len(&self) -> usize {
+        self.events.iter().map(MacroEvent::encoded_len).sum()
     }
 
     /// Encode to the 256-byte blob.
@@ -95,7 +116,7 @@ impl Macro {
                 }
             }
         }
-        if stream.len() > MACRO_BYTES - 6 {
+        if stream.len() > MACRO_STREAM_MAX {
             return Err(Error::OutOfRange {
                 field: "macro length",
                 value: stream.len() as i64,
@@ -422,5 +443,61 @@ mod tests {
             events: vec![ev; 200],
         };
         assert!(m.to_blob().is_err());
+    }
+
+    /// The byte counter the editor shows must agree with the encoder, or a
+    /// take can look like it fits and then be refused at save.
+    #[test]
+    fn encoded_len_matches_the_blob() {
+        let m = Macro {
+            repeat: 1,
+            events: vec![
+                MacroEvent::Key {
+                    usage: 0x04,
+                    pressed: true,
+                    delay_ms: 20, // short form
+                },
+                MacroEvent::Key {
+                    usage: 0x04,
+                    pressed: false,
+                    delay_ms: 0, // long form
+                },
+                MacroEvent::MouseMove {
+                    dx: 1,
+                    dy: 2,
+                    delay_ms: 3,
+                },
+                MacroEvent::MouseButton {
+                    button: 0,
+                    pressed: true,
+                    delay_ms: 200, // long form
+                },
+            ],
+        };
+        let blob = m.to_blob().unwrap();
+        assert_eq!(m.stream_len(), 2 + 4 + 4 + 4);
+        // The stream sits after the repeat count, and the rest is terminator.
+        let stream = &blob[2..2 + m.stream_len()];
+        assert!(stream.iter().any(|&b| b != 0));
+        assert!(blob[2 + m.stream_len()..].iter().all(|&b| b == 0));
+    }
+
+    /// A take that fills the slot exactly is accepted; one byte more is not.
+    #[test]
+    fn the_stream_limit_is_the_blob_boundary() {
+        let ev = MacroEvent::Key {
+            usage: 0x04,
+            pressed: true,
+            delay_ms: 1,
+        };
+        let m = Macro {
+            repeat: 1,
+            events: vec![ev; MACRO_STREAM_MAX / 2],
+        };
+        assert_eq!(m.stream_len(), MACRO_STREAM_MAX);
+        assert!(m.to_blob().is_ok());
+        let mut over = m.clone();
+        over.events.push(ev);
+        assert!(over.to_blob().is_err());
     }
 }
