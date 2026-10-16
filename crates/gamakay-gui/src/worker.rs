@@ -55,10 +55,12 @@ pub enum Event {
     Connected(Summary),
     Disconnected,
     Backlight(LedState),
-    /// The decoded non-empty slots of a layer.
+    /// The decoded non-empty slots of a layer, plus the slots the firmware
+    /// runs itself (which therefore cannot be repurposed).
     Layer {
         fn_layer: bool,
         slots: Vec<(u8, String)>,
+        locked: Vec<u8>,
     },
     Macros(Vec<(u8, String)>),
     Status(String),
@@ -78,6 +80,8 @@ pub fn spawn(events: UnboundedSender<Event>) -> std::sync::mpsc::Sender<Request>
 struct Worker {
     events: UnboundedSender<Event>,
     device: Option<(HidrawDevice, HidrawInfo)>,
+    /// Fn-layer slots the firmware drives (from the identified record).
+    fn_locked: &'static [u8],
 }
 
 impl Worker {
@@ -85,6 +89,7 @@ impl Worker {
         Self {
             events,
             device: None,
+            fn_locked: &[],
         }
     }
 
@@ -215,6 +220,7 @@ impl Worker {
             return;
         };
         let record = gamakay_core::device::by_id(id);
+        self.fn_locked = record.map(|r| r.fn_locked).unwrap_or(&[]);
         let model = record
             .map(|r| r.display_name.to_string())
             .unwrap_or_else(|| "unknown".to_string());
@@ -244,6 +250,7 @@ impl Worker {
             self.emit(Event::Layer {
                 fn_layer,
                 slots: layer_slots(&km),
+                locked: self.fn_locked.to_vec(),
             });
         }
     }
@@ -309,6 +316,7 @@ impl Worker {
                     self.emit(Event::Layer {
                         fn_layer,
                         slots: layer_slots(&km),
+                        locked: self.fn_locked.to_vec(),
                     });
                     self.emit(Event::Status(format!("slot {slot} updated")));
                     return;

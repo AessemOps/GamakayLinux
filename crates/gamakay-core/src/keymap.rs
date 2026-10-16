@@ -47,6 +47,9 @@ pub enum SlotValue {
     Macro { mode: u8, index: u8 },
     /// A special function: 1 Fn, 12 power save, 17 Caps LED swap.
     Special(u8),
+    /// A firmware action (tag `0x0D`): the lighting/media controls the firmware
+    /// runs itself. Seen on the LK67's Fn layer for brightness/speed/mode.
+    Action { a: u8, b: u8 },
     /// A tag we do not model; kept verbatim so writes round-trip.
     Unknown([u8; 4]),
 }
@@ -66,8 +69,19 @@ impl Slot {
             0x03 => SlotValue::Consumer(u16::from_le_bytes([b, c])),
             0x09 => SlotValue::Macro { mode: a, index: b },
             0x0A => SlotValue::Special(a),
+            0x0D => SlotValue::Action { a, b },
             _ => SlotValue::Unknown(self.0),
         }
+    }
+
+    /// Whether the firmware runs this entry itself, so the Fn-layer key it
+    /// sits on cannot be repurposed. The knob's own keys are the other such
+    /// set (the vendor calls both "system keys").
+    pub fn is_firmware_owned(self) -> bool {
+        matches!(
+            self.value(),
+            SlotValue::Special(_) | SlotValue::Action { .. }
+        )
     }
 
     pub fn from_value(v: SlotValue) -> Self {
@@ -80,6 +94,7 @@ impl Slot {
             }
             SlotValue::Macro { mode, index } => Slot([0x09, mode, index, 0]),
             SlotValue::Special(s) => Slot([0x0A, s, 0, 0]),
+            SlotValue::Action { a, b } => Slot([0x0D, a, b, 0]),
             SlotValue::Unknown(raw) => Slot(raw),
         }
     }
@@ -103,6 +118,7 @@ impl Slot {
                     .unwrap_or("?");
                 format!("macro {index} ({m})")
             }
+            SlotValue::Action { a, b } => format!("fn action {a:02x} {b:02x}"),
             SlotValue::Special(s) => match s {
                 1 => "Fn".to_string(),
                 12 => "power-save".to_string(),
@@ -251,6 +267,7 @@ mod tests {
             SlotValue::Consumer(0x00E9),
             SlotValue::Macro { mode: 1, index: 5 },
             SlotValue::Special(1),
+            SlotValue::Action { a: 2, b: 1 },
             SlotValue::Unknown([0x42, 1, 2, 3]),
         ] {
             assert_eq!(Slot::from_value(v).value(), v, "round trip {v:?}");

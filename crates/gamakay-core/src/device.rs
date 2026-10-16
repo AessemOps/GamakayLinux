@@ -56,6 +56,9 @@ pub struct DeviceRecord {
     /// record, not from a GET reply (the firmware answers one anyway).
     pub side_light: bool,
     pub keys: u16,
+    /// The keys the firmware drives on the **Fn layer**, which therefore
+    /// cannot be repurposed there. Slot indexes.
+    pub fn_locked: &'static [u8],
 }
 
 /// The GamaKay LK67, wired USB. The only board this project targets and tests.
@@ -80,6 +83,15 @@ pub const LK67: DeviceRecord = DeviceRecord {
     light_layout: "LK67",
     side_light: false,
     keys: 67,
+    // Read off GAMAKAY's web driver with the Fn layer selected: the keys it
+    // paints red. They are the firmware's Fn functions (QWER lighting/speed,
+    // the arrows' brightness/speed, the right column's mode keys) plus the
+    // Win lock, the Fn key and Space.
+    fn_locked: &[
+        8, 14, 20, 26, // A Z E R  (US Q W E R)
+        11, 41, 71, // Win, Space, Fn
+        82, 83, 85, 86, 87, 88, 89, // Up Left Ins Del PgDn Down Right
+    ],
 };
 
 /// USB ids the LK67 used before the 2026-10 firmware update. `by_usb` matches
@@ -107,6 +119,7 @@ pub const YZ68: DeviceRecord = DeviceRecord {
     light_layout: "se",
     side_light: false,
     keys: 68,
+    fn_locked: &[],
 };
 
 pub const DEVICES: &[DeviceRecord] = &[LK67, YZ68];

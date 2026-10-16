@@ -15,6 +15,7 @@ mod worker;
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Mutex;
 
 use iced::futures::channel::mpsc::{UnboundedReceiver, unbounded};
@@ -97,6 +98,8 @@ struct App {
     /// Keymap layers the board exposes, and the active one.
     layers: u8,
     profile: u8,
+    /// Slots the firmware runs itself, which the Fn layer shows in red.
+    locked: HashSet<u8>,
     // Macro editor.
     macros: Vec<(u8, String)>,
     macro_slot: String,
@@ -170,6 +173,7 @@ impl App {
             show_slots: false,
             layers: 1,
             profile: 0,
+            locked: HashSet::new(),
             macros: Vec::new(),
             macro_slot: "0".into(),
             macro_steps: "A+@20, A-@20".into(),
@@ -252,10 +256,15 @@ impl App {
                 self.status = "no keyboard found".into();
             }
             Event::Backlight(s) => self.load_state(&s),
-            Event::Layer { fn_layer, slots } => {
+            Event::Layer {
+                fn_layer,
+                slots,
+                locked,
+            } => {
                 if fn_layer == self.fn_layer {
                     self.bindings = slots.iter().cloned().collect();
                     self.layer = slots;
+                    self.locked = locked.into_iter().collect();
                 }
             }
             Event::Macros(m) => self.macros = m,
@@ -624,6 +633,8 @@ impl App {
             bindings: &self.bindings,
             selected: self.selected,
             preview: self.preview.clone(),
+            locked: &self.locked,
+            fn_layer: self.fn_layer,
             lighting: None,
         });
         let hint = match self.selected {

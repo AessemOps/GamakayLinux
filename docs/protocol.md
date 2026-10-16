@@ -340,6 +340,24 @@ active**:
 - The GUI addresses layers this way: the Keymap tab's Layer selector switches
   the active profile and the reads/writes follow it.
 
+### Which Fn-layer keys are fixed
+
+The firmware drives some Fn keys itself, so they cannot be repurposed there.
+GAMAKAY's **web driver** (which does support the LK67, unlike the 3.0.27 desktop
+app) paints exactly these red with the Fn layer selected — read off a
+screenshot and measured against the key grid:
+
+- `A Z E R` — the US `Q W E R` positions — slots 8, 14, 20, 26
+- `Win` 11, `Space` 41, `Fn` 71
+- `Up` 82, `Left` 83, `Ins` 85, `Del` 86, `PgDn` 87, `Down` 88, `Right` 89
+
+That is the firmware's own Fn set: the QWER/arrow lighting and speed keys, the
+right column's mode keys, the Win lock and Space. Notably the keyboard accepts
+a write to **every** Fn slot (probed: 0..125 all took F1 and were restored), so
+the block is the firmware ignoring those entries, not the protocol refusing
+them. `DeviceRecord::fn_locked` carries the list and the GUI paints those keys
+red on the Fn layer.
+
 ### The newer packet shape is not supported
 
 Vendor app 3.0.27 builds the keymap commands with a different header — read

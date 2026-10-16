@@ -19,6 +19,7 @@ const GAP: f32 = 4.0;
 const RADIUS: f32 = 5.0;
 
 const KEY_BG: Color = Color::from_rgb(0.16, 0.18, 0.22);
+const KEY_LOCKED: Color = Color::from_rgb(0.40, 0.16, 0.18);
 const KEY_SELECTED: Color = Color::from_rgb(0.30, 0.40, 0.55);
 const TEXT: Color = Color::from_rgb(0.85, 0.88, 0.92);
 const BINDING: Color = Color::from_rgb(0.53, 0.75, 0.82);
@@ -32,6 +33,10 @@ pub struct Keyboard<'a> {
     pub selected: Option<u8>,
     /// A pending change to preview: (slot, new binding).
     pub preview: Option<(u8, String)>,
+    /// Slots the firmware owns, painted red on the Fn layer.
+    pub locked: &'a std::collections::HashSet<u8>,
+    /// Whether the Fn layer is the one being shown.
+    pub fn_layer: bool,
     /// A live lighting preview (colour, rainbow, brightness, animation).
     pub lighting: Option<LightPreview>,
 }
@@ -126,8 +131,11 @@ impl Program<Message> for Keyboard<'_> {
             }
 
             let selected = self.selected == Some(k.slot);
+            let locked = self.fn_layer && self.locked.contains(&k.slot);
             let fill = if selected {
                 KEY_SELECTED
+            } else if locked {
+                KEY_LOCKED
             } else {
                 self.lighting
                     .map(|lp| key_color(&lp, k, index))
