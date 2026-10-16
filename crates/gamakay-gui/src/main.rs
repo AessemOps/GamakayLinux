@@ -91,6 +91,7 @@ struct App {
     selected: Option<u8>,
     preview: Option<(u8, String)>,
     slot_edit: String,
+    show_slots: bool,
     // Macro editor.
     macros: Vec<(u8, String)>,
     macro_slot: String,
@@ -116,6 +117,8 @@ enum Message {
     SelectSlot(u8),
     /// Bind the selected slot to a value (from the picker or a captured key).
     AssignSlot(SlotValue),
+    /// Expand/collapse the slot list.
+    ToggleSlots,
     /// A physical key was pressed while a slot is selected.
     Capture(iced::keyboard::key::Physical),
     PickColor(f32, f32),
@@ -156,6 +159,7 @@ impl App {
             selected: None,
             preview: None,
             slot_edit: String::new(),
+            show_slots: false,
             macros: Vec::new(),
             macro_slot: "0".into(),
             macro_steps: "A+@20, A-@20".into(),
@@ -187,6 +191,7 @@ impl App {
                 self.send(Request::Refresh);
             }
             Message::AssignSlot(v) => self.assign_slot(v),
+            Message::ToggleSlots => self.show_slots = !self.show_slots,
             Message::Capture(physical) => match physical::usage(&physical) {
                 Some(u) => self.assign_slot(SlotValue::Hid(u)),
                 None => self.status = "that key can't be sent by the board".into(),
@@ -624,10 +629,18 @@ impl App {
         }))
         .spacing(2);
 
+        let slots_body: Element<Message> = if self.show_slots {
+            list.into()
+        } else {
+            text(format!("{} keys bound on this layer", self.layer.len()))
+                .size(12)
+                .into()
+        };
+
         column![
             section("Board".to_string(), board.into()),
             section("Pick a key".to_string(), self.key_picker()),
-            section("Slots".to_string(), list.into()),
+            section_toggle("Slots", self.show_slots, slots_body, Message::ToggleSlots),
         ]
         .spacing(12)
         .into()
@@ -643,9 +656,7 @@ impl App {
                     .into()
             })
             .collect();
-        scrollable(column(groups).spacing(16))
-            .height(Length::Fixed(300.0))
-            .into()
+        column(groups).spacing(16).into()
     }
 
     fn view_macros(&self) -> Element<'_, Message> {
@@ -747,6 +758,46 @@ fn section<'a>(title: String, body: Element<'a, Message>) -> Element<'a, Message
     .into()
 }
 
+/// A card whose header collapses the body.
+fn section_toggle<'a>(
+    title: &'a str,
+    open: bool,
+    body: Element<'a, Message>,
+    on_toggle: Message,
+) -> Element<'a, Message> {
+    let header = button(
+        row![
+            text(title).size(14),
+            horizontal_space(),
+            text(if open { "▾" } else { "▸" }).size(14),
+        ]
+        .align_y(iced::Alignment::Center)
+        .width(Length::Fill),
+    )
+    .on_press(on_toggle)
+    .width(Length::Fill)
+    .style(header_button);
+    container(column![header, body].spacing(8).width(Length::Fill))
+        .padding(12)
+        .width(Length::Fill)
+        .style(card)
+        .into()
+}
+
+/// A flat, borderless button for card headers.
+fn header_button(_: &Theme, status: button::Status) -> button::Style {
+    let hovered = matches!(status, button::Status::Hovered | button::Status::Pressed);
+    button::Style {
+        background: None,
+        text_color: if hovered {
+            Color::from_rgb(0.96, 0.97, 1.0)
+        } else {
+            Color::from_rgb(0.80, 0.83, 0.90)
+        },
+        ..button::Style::default()
+    }
+}
+
 /// A label on the left and its control on the right, on a single line.
 fn field_row<'a>(label: &'a str, control: Element<'a, Message>) -> Element<'a, Message> {
     row![
@@ -794,9 +845,9 @@ fn capture_key(
     }
 }
 
-/// A grid of picker buttons.
+/// A grid of picker buttons, filling the card's width.
 fn key_grid(entries: &[keypicker::Entry]) -> Element<'static, Message> {
-    const PER_ROW: usize = 8;
+    const PER_ROW: usize = 12;
     let rows: Vec<Element<Message>> = entries
         .chunks(PER_ROW)
         .map(|chunk| {
@@ -805,7 +856,7 @@ fn key_grid(entries: &[keypicker::Entry]) -> Element<'static, Message> {
                 .map(|(label, value)| {
                     button(text(*label).size(11))
                         .on_press(Message::AssignSlot(*value))
-                        .width(Length::Fixed(76.0))
+                        .width(Length::Fixed(78.0))
                         .style(picker_button)
                         .into()
                 })
