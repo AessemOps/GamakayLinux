@@ -43,8 +43,8 @@ this file records what was used and how. `Last reviewed: 2026-10-16`.
 - What: the monochrome emoji font.
 - How used: bundled as `crates/gamakay-gui/assets/NotoEmoji.ttf`, with its
   licence alongside as `NotoEmoji-OFL.txt`, and loaded at startup. It is the
-  only font available here with the emoji the keyboard previews draw (⏸ 🔒 🍎
-  🤖): DejaVu Sans has none of them, the packaged Noto fonts are missing some,
+  only font available here with the emoji the keyboard previews draw (🐧 ⏸ 🔒 🍎
+  🤖 💡): DejaVu Sans has none of them, the packaged Noto fonts are missing some,
   and the colour-emoji font cannot be rendered as text by this renderer.
 - Reason GPL-compatible: the OFL 1.1 permits bundling and requires the licence
   to travel with the font, which it does. The font stays under the OFL and is

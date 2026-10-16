@@ -12,7 +12,6 @@ use gamakay_core::layout::{LK67_HEIGHT, LK67_LAYOUT, LK67_WIDTH, LayoutKey};
 
 use crate::Message;
 use crate::glyph;
-use crate::icons;
 use crate::patterns::{self, Params};
 
 const GAP: f32 = 4.0;
@@ -154,30 +153,17 @@ impl Program<Message> for Keyboard<'_> {
                 );
             }
 
-            // The key legend: a drawn mark where there is one, else text.
-            if let Some(icon) = glyph::icon(k.label) {
-                let s = rect.height * 0.54;
-                icons::draw(
-                    &mut frame,
-                    icon,
-                    Rectangle::new(
-                        Point::new(rect.center_x() - s / 2.0, rect.y + rect.height * 0.12),
-                        Size::new(s, s),
-                    ),
-                    fill,
-                );
-            } else {
-                frame.fill_text(Text {
-                    content: glyph::legend(k.label).to_string(),
-                    position: Point::new(rect.center_x(), rect.y + rect.height * 0.18),
-                    font: glyph::font(k.label),
-                    color: TEXT,
-                    size: iced::Pixels((scale * 0.26).clamp(8.0, 18.0)),
-                    horizontal_alignment: alignment::Horizontal::Center,
-                    vertical_alignment: alignment::Vertical::Top,
-                    ..Text::default()
-                });
-            }
+            // The key legend.
+            frame.fill_text(Text {
+                content: glyph::legend(k.label).to_string(),
+                position: Point::new(rect.center_x(), rect.y + rect.height * 0.18),
+                font: glyph::font(k.label),
+                color: TEXT,
+                size: iced::Pixels((scale * 0.26).clamp(8.0, 18.0)),
+                horizontal_alignment: alignment::Horizontal::Center,
+                vertical_alignment: alignment::Vertical::Top,
+                ..Text::default()
+            });
 
             // The current binding, or the pending preview.
             let preview = self
@@ -189,29 +175,16 @@ impl Program<Message> for Keyboard<'_> {
             if let Some((text, color)) = preview.or(current)
                 && glyph::legend(text) != glyph::legend(k.label)
             {
-                if let Some(icon) = glyph::icon(text) {
-                    let s = rect.height * 0.44;
-                    icons::draw(
-                        &mut frame,
-                        icon,
-                        Rectangle::new(
-                            Point::new(rect.center_x() - s / 2.0, rect.y + rect.height * 0.60),
-                            Size::new(s, s),
-                        ),
-                        fill,
-                    );
-                } else {
-                    frame.fill_text(Text {
-                        content: glyph::legend(text).to_string(),
-                        position: Point::new(rect.center_x(), rect.y + rect.height * 0.62),
-                        font: glyph::font(text),
-                        color,
-                        size: iced::Pixels((scale * 0.2).clamp(7.0, 13.0)),
-                        horizontal_alignment: alignment::Horizontal::Center,
-                        vertical_alignment: alignment::Vertical::Top,
-                        ..Text::default()
-                    });
-                }
+                frame.fill_text(Text {
+                    content: glyph::legend(text).to_string(),
+                    position: Point::new(rect.center_x(), rect.y + rect.height * 0.62),
+                    font: glyph::font(text),
+                    color,
+                    size: iced::Pixels((scale * 0.2).clamp(7.0, 13.0)),
+                    horizontal_alignment: alignment::Horizontal::Center,
+                    vertical_alignment: alignment::Vertical::Top,
+                    ..Text::default()
+                });
             }
         }
 

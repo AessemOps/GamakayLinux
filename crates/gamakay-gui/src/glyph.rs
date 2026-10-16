@@ -7,23 +7,12 @@
 //! renders as a tofu box. Everything here was checked against the installed
 //! fonts (`fc-list :charset=…`).
 //!
-//! Some legends are drawn instead of typed (`Icon`): the Meta penguin, and the
-//! Android/iOS marks. Their glyphs (🤖, 🍎, ) exist only in the colour-emoji
-//! font, or nowhere at all, so no font here can render them as text.
 
 /// DejaVu Sans carries most of the symbols.
 const DV: &str = "DejaVu Sans";
 /// Noto Emoji (monochrome, bundled in `assets/`) carries the emoji: ⏸, 🔒, 🍎
 /// and 🤖 — none of which is in DejaVu, and no packaged font here has them.
 const NE: &str = "Noto Emoji";
-
-/// A legend drawn with canvas paths. Only the penguin needs this: there is no
-/// Tux glyph, and the emoji penguin is a different bird.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Icon {
-    /// Linux's penguin, for the Meta key.
-    Tux,
-}
 
 /// The symbol and the font family that has it.
 fn entry(name: &str) -> Option<(&'static str, &'static str)> {
@@ -34,7 +23,7 @@ fn entry(name: &str) -> Option<(&'static str, &'static str)> {
         "Shift" | "LeftShift" | "RightShift" => ("\u{21e7}", DV), // ⇧
         "Ctrl" | "LeftCtrl" | "RightCtrl" => ("\u{2303}", DV), // ⌃
         "Alt" | "LeftAlt" | "RightAlt" => ("\u{2387}", DV), // ⎇
-        "Win" | "GUI" | "LeftGUI" | "RightGUI" => return None, // drawn Tux
+        "Win" | "GUI" | "LeftGUI" | "RightGUI" => ("\u{1f427}", NE), // 🐧
         "Enter" => ("\u{23ce}", DV),                  // ⏎
         "Backspace" => ("\u{232b}", DV),              // ⌫
         "Space" => ("\u{2423}", DV),                  // ␣
@@ -81,23 +70,9 @@ pub fn of(name: &str) -> Option<&'static str> {
     entry(name).map(|e| e.0)
 }
 
-/// The drawn legend for a name, if it has one.
-pub fn icon(name: &str) -> Option<Icon> {
-    match name.trim() {
-        "Win" | "GUI" | "LeftGUI" | "RightGUI" | "Meta" => Some(Icon::Tux),
-        _ => None,
-    }
-}
-
-/// The legend to draw: the symbol when there is one, else the name. Drawn
-/// legends return an empty string, so a binding is not drawn on top of an
-/// identical cap.
+/// The legend to draw: the symbol when there is one, else the name.
 pub fn legend(name: &str) -> &str {
-    if icon(name).is_some() {
-        ""
-    } else {
-        of(name).unwrap_or(name)
-    }
+    of(name).unwrap_or(name)
 }
 
 /// The font to draw a legend in.
@@ -117,14 +92,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_the_penguin_is_drawn() {
-        assert_eq!(icon("Win"), Some(Icon::Tux));
-        assert_eq!(icon("LeftGUI"), Some(Icon::Tux));
-        assert_eq!(icon("A"), None);
-        assert_eq!(icon("Android mode"), None);
-        // A drawn cap and a drawn binding compare equal, so only one is drawn.
+    fn the_meta_keys_share_the_penguin() {
+        assert_eq!(of("Win"), Some("\u{1f427}"));
+        // A meta cap and a meta binding compare equal, so only one is drawn.
         assert_eq!(legend("Win"), legend("LeftGUI"));
-        assert_eq!(legend("Win"), "");
     }
 
     /// The bundled font must really have every glyph we point at it, or the
@@ -133,13 +104,20 @@ mod tests {
     fn the_bundled_font_has_every_glyph_we_ask_it_for() {
         const FONT: &[u8] = include_bytes!("../assets/NotoEmoji.ttf");
         let face = ttf_parser::Face::parse(FONT, 0).expect("the bundled font parses");
-        let asked: Vec<u32> = ["Pause", "Lock Win Key", "Android mode", "iOS mode"]
-            .iter()
-            .filter_map(|n| entry(n))
-            .filter(|(_, family)| *family == NE)
-            .filter_map(|(sym, _)| sym.chars().next())
-            .map(u32::from)
-            .collect();
+        let asked: Vec<u32> = [
+            "Pause",
+            "Lock Win Key",
+            "Backlight on/off",
+            "Android mode",
+            "iOS mode",
+            "Win",
+        ]
+        .iter()
+        .filter_map(|n| entry(n))
+        .filter(|(_, family)| *family == NE)
+        .filter_map(|(sym, _)| sym.chars().next())
+        .map(u32::from)
+        .collect();
         assert!(
             asked.len() >= 4,
             "expected several emoji legends, got {asked:?}"

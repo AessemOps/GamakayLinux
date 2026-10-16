@@ -7,7 +7,6 @@ mod canvas;
 mod color;
 mod colorwheel;
 mod glyph;
-mod icons;
 mod keypicker;
 mod patterns;
 mod physical;
@@ -492,15 +491,11 @@ impl App {
                     let y = (k.y + k.h / 2.0) / LK67_HEIGHT;
                     let c = patterns::color_at(&p, x, y, k.slot as usize, frame);
                     let radius = if k.knob { (unit - pad) / 2.0 } else { 5.0 };
-                    let key = container(if let Some(icon) = glyph::icon(k.label) {
-                        Element::from(icons::widget(icon, c, 22.0))
-                    } else {
-                        Element::from(
-                            text(glyph::legend(k.label))
-                                .size(11)
-                                .font(glyph::font(k.label)),
-                        )
-                    })
+                    let key = container(
+                        text(glyph::legend(k.label))
+                            .size(11)
+                            .font(glyph::font(k.label)),
+                    )
                     .width(Length::Fixed(k.w * unit - pad))
                     .height(Length::Fixed(unit - pad))
                     .align_x(iced::Alignment::Center)
