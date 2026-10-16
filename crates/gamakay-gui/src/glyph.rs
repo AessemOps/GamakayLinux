@@ -43,11 +43,12 @@ fn entry(name: &str) -> Option<(&'static str, &'static str)> {
         "Eject" => ("\u{23cf}", DV),                  // ⏏
         "Play/Pause" => ("\u{25b6}", DV),             // ▶
         // The firmware's Fn functions.
-        "Lock Win Key" => ("\u{1f512}", NE), // 🔒
-        "Windows mode" => ("\u{229e}", DV),  // ⊞
-        "macOS mode" => ("\u{2318}", DV),    // ⌘
-        "Android mode" => ("\u{1f916}", NE), // 🤖
-        "iOS mode" => ("\u{1f34e}", NE),     // 🍎
+        "Lock Win Key" => ("\u{1f512}", NE),     // 🔒
+        "Backlight on/off" => ("\u{1f4a1}", NE), // 💡
+        "Windows mode" => ("\u{229e}", DV),      // ⊞
+        "macOS mode" => ("\u{2318}", DV),        // ⌘
+        "Android mode" => ("\u{1f916}", NE),     // 🤖
+        "iOS mode" => ("\u{1f34e}", NE),         // 🍎
         // Punctuation keeps its character, which is also what the cap shows.
         "Minus" => ("-", DV),
         "Equal" => ("=", DV),

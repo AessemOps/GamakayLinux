@@ -204,6 +204,12 @@ impl App {
             Message::LightOff => self.send(Request::SetBacklightOff(true)),
             Message::FnLayer(fn_layer) => {
                 self.fn_layer = fn_layer;
+                // The other layer has different bindings, so drop anything
+                // pending for the one being left: a stale preview would draw
+                // its symbol on the wrong layer.
+                self.preview = None;
+                self.selected = None;
+                self.locked.clear();
                 self.send(Request::Refresh);
             }
             Message::SwitchLayer(profile) => {

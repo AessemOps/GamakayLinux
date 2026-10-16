@@ -109,9 +109,22 @@ impl Program<Message> for Keyboard<'_> {
         _cursor: mouse::Cursor,
     ) -> Vec<Geometry> {
         let mut frame = Frame::new(renderer, bounds.size());
+        // Guard against a degenerate or non-finite layout: a huge glyph
+        // position makes cosmic-text's SubpixelBin overflow (`trunc + 1`) and
+        // panic, which is what broke the render when switching layers.
+        if !bounds.width.is_finite()
+            || !bounds.height.is_finite()
+            || bounds.width < 1.0
+            || bounds.height < 1.0
+        {
+            return vec![frame.into_geometry()];
+        }
         let scale = ((bounds.width - GAP) / LK67_WIDTH)
             .min((bounds.height - GAP) / LK67_HEIGHT)
             .max(1.0);
+        if !scale.is_finite() {
+            return vec![frame.into_geometry()];
+        }
         let ox = (bounds.width - LK67_WIDTH * scale) / 2.0;
         let oy = (bounds.height - LK67_HEIGHT * scale) / 2.0;
 
@@ -154,16 +167,19 @@ impl Program<Message> for Keyboard<'_> {
             }
 
             // The key legend.
-            frame.fill_text(Text {
-                content: glyph::legend(k.label).to_string(),
-                position: Point::new(rect.center_x(), rect.y + rect.height * 0.18),
-                font: glyph::font(k.label),
-                color: TEXT,
-                size: iced::Pixels((scale * 0.26).clamp(8.0, 18.0)),
-                horizontal_alignment: alignment::Horizontal::Center,
-                vertical_alignment: alignment::Vertical::Top,
-                ..Text::default()
-            });
+            let at = Point::new(rect.center_x(), rect.y + rect.height * 0.18);
+            if at.x.is_finite() && at.y.is_finite() {
+                frame.fill_text(Text {
+                    content: glyph::legend(k.label).to_string(),
+                    position: at,
+                    font: glyph::font(k.label),
+                    color: TEXT,
+                    size: iced::Pixels((scale * 0.26).clamp(8.0, 18.0)),
+                    horizontal_alignment: alignment::Horizontal::Center,
+                    vertical_alignment: alignment::Vertical::Top,
+                    ..Text::default()
+                });
+            }
 
             // The current binding, or the pending preview.
             let preview = self
@@ -175,16 +191,19 @@ impl Program<Message> for Keyboard<'_> {
             if let Some((text, color)) = preview.or(current)
                 && glyph::legend(text) != glyph::legend(k.label)
             {
-                frame.fill_text(Text {
-                    content: glyph::legend(text).to_string(),
-                    position: Point::new(rect.center_x(), rect.y + rect.height * 0.62),
-                    font: glyph::font(text),
-                    color,
-                    size: iced::Pixels((scale * 0.2).clamp(7.0, 13.0)),
-                    horizontal_alignment: alignment::Horizontal::Center,
-                    vertical_alignment: alignment::Vertical::Top,
-                    ..Text::default()
-                });
+                let at = Point::new(rect.center_x(), rect.y + rect.height * 0.62);
+                if at.x.is_finite() && at.y.is_finite() {
+                    frame.fill_text(Text {
+                        content: glyph::legend(text).to_string(),
+                        position: at,
+                        font: glyph::font(text),
+                        color,
+                        size: iced::Pixels((scale * 0.2).clamp(7.0, 13.0)),
+                        horizontal_alignment: alignment::Horizontal::Center,
+                        vertical_alignment: alignment::Vertical::Top,
+                        ..Text::default()
+                    });
+                }
             }
         }
 
