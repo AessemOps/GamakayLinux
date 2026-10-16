@@ -92,7 +92,10 @@ impl Slot {
                 Some(n) => n.to_string(),
                 None => format!("hid 0x{u:02X}"),
             },
-            SlotValue::Consumer(c) => format!("consumer 0x{c:04X}"),
+            SlotValue::Consumer(c) => match keycode::consumer_name(c) {
+                Some(n) => n.to_string(),
+                None => format!("consumer 0x{c:04X}"),
+            },
             SlotValue::Macro { mode, index } => {
                 let m = ["repeat", "toggle", "hold"]
                     .get(mode as usize)
