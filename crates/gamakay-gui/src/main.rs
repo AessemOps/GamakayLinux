@@ -496,9 +496,14 @@ impl App {
         let tint = Color::from_rgb8(rgb[0], rgb[1], rgb[2]);
         let (hue, sat) = color::rgb_to_hs(rgb);
         let mode_code = Mode::from_name(&self.mode).map(Mode::code).unwrap_or(1);
+
+        let preview = container(self.preview_grid(mode_code, rgb))
+            .width(Length::Fill)
+            .align_x(iced::Alignment::Center);
+
         let swatch: Element<Message> = container(text(" "))
-            .width(Length::Fixed(22.0))
-            .height(Length::Fixed(22.0))
+            .width(Length::Fixed(20.0))
+            .height(Length::Fixed(20.0))
             .style(move |_: &Theme| container::Style {
                 background: Some(Background::Color(tint)),
                 border: Border {
@@ -509,60 +514,79 @@ impl App {
                 ..container::Style::default()
             })
             .into();
-        let preview = self.preview_grid(mode_code, rgb);
-        let colour_field: Element<Message> = row![
-            Element::from(colorwheel::wheel(colorwheel::ColorWheel::new(hue, sat))),
-            Element::from(
+        let colour: Element<Message> = column![
+            text("Colour").size(12),
+            row![
+                Element::from(colorwheel::wheel(
+                    colorwheel::ColorWheel::new(hue, sat),
+                    150.0
+                )),
                 column![
                     swatch,
-                    Element::from(text_input("#rrggbb", &self.color).on_input(Message::Color)),
-                    Element::from(text(format!("hue {hue:.0}°  sat {:.0}%", sat * 100.0)).size(12)),
+                    Element::from(
+                        text_input("#rrggbb", &self.color)
+                            .on_input(Message::Color)
+                            .width(Length::Fixed(120.0))
+                    ),
+                    Element::from(text(format!("hue {hue:.0}°  sat {:.0}%", sat * 100.0)).size(11)),
                 ]
-                .spacing(10),
-            ),
+                .spacing(8),
+            ]
+            .spacing(14)
+            .align_y(iced::Alignment::Center),
         ]
-        .spacing(16)
+        .spacing(8)
         .into();
-        let controls = column![
-            labeled(
-                "Mode",
-                pick_list(self.modes.clone(), Some(self.mode.clone()), Message::Mode).into()
-            ),
-            labeled("Colour", colour_field),
-            labeled(
-                "Brightness",
-                row![
-                    Element::from(slider(0..=4, self.brightness, Message::Brightness)),
-                    text(format!("{} / 4", self.brightness)),
-                ]
-                .spacing(8)
-                .into()
-            ),
-            labeled(
-                "Speed",
-                row![
-                    Element::from(slider(0..=4, self.speed, Message::Speed)),
-                    text(format!("{} / 4", self.speed)),
-                ]
-                .spacing(8)
-                .into()
-            ),
-            labeled(
-                "Direction",
-                row![
-                    Element::from(slider(0..=3, self.direction, Message::Direction)),
-                    text(self.direction.to_string()),
-                ]
-                .spacing(8)
-                .into()
-            ),
-            rainbow_row(self.rainbow),
-            light_buttons(),
+
+        let controls: Element<Message> = row![
+            column![
+                field_row(
+                    "Mode",
+                    pick_list(self.modes.clone(), Some(self.mode.clone()), Message::Mode)
+                        .width(Length::Fixed(150.0))
+                        .into()
+                ),
+                slider_row(
+                    "Brightness",
+                    0..=4,
+                    self.brightness,
+                    Message::Brightness,
+                    format!("{} / 4", self.brightness),
+                ),
+                slider_row(
+                    "Speed",
+                    0..=4,
+                    self.speed,
+                    Message::Speed,
+                    format!("{} / 4", self.speed),
+                ),
+                slider_row(
+                    "Direction",
+                    0..=3,
+                    self.direction,
+                    Message::Direction,
+                    self.direction.to_string(),
+                ),
+                field_row(
+                    "Rainbow",
+                    toggler(self.rainbow).on_toggle(Message::Rainbow).into()
+                ),
+            ]
+            .spacing(10)
+            .width(Length::Fill),
+            colour,
         ]
-        .spacing(12);
+        .spacing(30)
+        .width(Length::Fill)
+        .into();
+
+        let backlight = column![controls, light_buttons()]
+            .spacing(16)
+            .width(Length::Fill);
+
         column![
-            section("Preview".to_string(), preview),
-            section("Backlight".to_string(), controls.into()),
+            section("Preview".to_string(), preview.into()),
+            section("Backlight".to_string(), backlight.into()),
         ]
         .spacing(12)
         .into()
@@ -704,17 +728,44 @@ fn card(_: &Theme) -> container::Style {
 
 /// A titled card.
 fn section<'a>(title: String, body: Element<'a, Message>) -> Element<'a, Message> {
-    container(column![text(title).size(15), body].spacing(10))
-        .padding(14)
-        .style(card)
-        .into()
+    container(
+        column![text(title).size(14), body]
+            .spacing(8)
+            .width(Length::Fill),
+    )
+    .padding(12)
+    .width(Length::Fill)
+    .style(card)
+    .into()
 }
 
-/// The Rainbow toggle row.
-fn rainbow_row(value: bool) -> Element<'static, Message> {
-    row![text("Rainbow"), toggler(value).on_toggle(Message::Rainbow)]
-        .spacing(8)
-        .into()
+/// A label on the left and its control on the right, on a single line.
+fn field_row<'a>(label: &'a str, control: Element<'a, Message>) -> Element<'a, Message> {
+    row![
+        container(text(label).size(12)).width(Length::Fixed(84.0)),
+        control,
+    ]
+    .spacing(10)
+    .align_y(iced::Alignment::Center)
+    .into()
+}
+
+/// A labelled 0..=max slider with its value shown on the right.
+fn slider_row<'a>(
+    label: &'a str,
+    range: std::ops::RangeInclusive<u8>,
+    value: u8,
+    on_change: fn(u8) -> Message,
+    shown: String,
+) -> Element<'a, Message> {
+    let control: Element<Message> = row![
+        Element::from(slider(range, value, on_change).width(Length::Fixed(200.0))),
+        container(text(shown).size(12)).width(Length::Fixed(56.0)),
+    ]
+    .spacing(10)
+    .align_y(iced::Alignment::Center)
+    .into();
+    field_row(label, control)
 }
 
 /// The lighting action buttons.

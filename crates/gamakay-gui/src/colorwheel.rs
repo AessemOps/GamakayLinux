@@ -45,11 +45,11 @@ impl ColorWheel {
     }
 }
 
-/// A `Canvas` over the wheel.
-pub fn wheel(w: ColorWheel) -> Canvas<ColorWheel, Message> {
+/// A `Canvas` over the wheel, `size` pixels square.
+pub fn wheel(w: ColorWheel, size: f32) -> Canvas<ColorWheel, Message> {
     Canvas::new(w)
-        .width(Length::Fixed(190.0))
-        .height(Length::Fixed(190.0))
+        .width(Length::Fixed(size))
+        .height(Length::Fixed(size))
 }
 
 impl Program<Message> for ColorWheel {
