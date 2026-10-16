@@ -8,29 +8,28 @@
 /// The symbol for a key legend, if there is a conventional one.
 pub fn of(name: &str) -> Option<&'static str> {
     Some(match name {
-        "Tab" => "\u{21e5}",                                  // ⇥
-        "Caps Lock" | "CapsLock" => "\u{21ea}",               // ⇪
-        "Shift" | "LeftShift" | "RightShift" => "\u{21e7}",   // ⇧
-        "Ctrl" | "LeftCtrl" | "RightCtrl" => "\u{2303}",      // ⌃
-        "Alt" | "LeftAlt" | "RightAlt" => "\u{2387}",         // ⎇
-        "Win" | "GUI" | "LeftGUI" | "RightGUI" => "\u{229e}", // ⊞
-        "Enter" => "\u{23ce}",                                // ⏎
-        "Backspace" => "\u{232b}",                            // ⌫
-        "Space" => "\u{2423}",                                // ␣
-        "Del" | "Delete" => "\u{2326}",                       // ⌦
-        "PgUp" | "PageUp" => "\u{21de}",                      // ⇞
-        "PgDn" | "PageDown" => "\u{21df}",                    // ⇟
-        "Home" => "\u{21f1}",                                 // ⇱
-        "End" => "\u{21f2}",                                  // ⇲
-        "Up" => "\u{2191}",                                   // ↑
-        "Down" => "\u{2193}",                                 // ↓
-        "Left" => "\u{2190}",                                 // ←
-        "Right" => "\u{2192}",                                // →
-        "Menu" => "\u{2630}",                                 // ☰
-        "Play/Pause" => "\u{25b6}",                           // ▶
-        "Eject" => "\u{23cf}",                                // ⏏
-        "Pause" => "\u{23f8}",                                // ⏸
-        "ScrollLock" => "\u{21f3}",                           // ⇳
+        "Tab" => "\u{21e5}",                                // ⇥
+        "Caps Lock" | "CapsLock" => "\u{21ea}",             // ⇪
+        "Shift" | "LeftShift" | "RightShift" => "\u{21e7}", // ⇧
+        "Ctrl" | "LeftCtrl" | "RightCtrl" => "\u{2303}",    // ⌃
+        "Alt" | "LeftAlt" | "RightAlt" => "\u{2387}",       // ⎇
+        "Enter" => "\u{23ce}",                              // ⏎
+        "Backspace" => "\u{232b}",                          // ⌫
+        "Space" => "\u{2423}",                              // ␣
+        "Del" | "Delete" => "\u{2326}",                     // ⌦
+        "PgUp" | "PageUp" => "\u{21de}",                    // ⇞
+        "PgDn" | "PageDown" => "\u{21df}",                  // ⇟
+        "Home" => "\u{21f1}",                               // ⇱
+        "End" => "\u{21f2}",                                // ⇲
+        "Up" => "\u{2191}",                                 // ↑
+        "Down" => "\u{2193}",                               // ↓
+        "Left" => "\u{2190}",                               // ←
+        "Right" => "\u{2192}",                              // →
+        "Menu" => "\u{2630}",                               // ☰
+        "Play/Pause" => "\u{25b6}",                         // ▶
+        "Eject" => "\u{23cf}",                              // ⏏
+        "Pause" => "\u{23f8}",                              // ⏸
+        "ScrollLock" => "\u{21f3}",                         // ⇳
         // Punctuation keeps its character, which is also what the cap shows.
         "Minus" => "-",
         "Equal" => "=",
@@ -48,9 +47,19 @@ pub fn of(name: &str) -> Option<&'static str> {
     })
 }
 
-/// The legend to draw: the symbol when there is one, else the name.
+/// The Meta key (`Win`/`GUI`/left/right) gets a drawn Tux instead of a glyph.
+pub fn is_meta(name: &str) -> bool {
+    matches!(name, "Win" | "GUI" | "LeftGUI" | "RightGUI" | "Meta")
+}
+
+/// The legend to draw: the symbol when there is one, else the name. Meta keys
+/// return an empty legend so a meta binding is not drawn on top of a meta cap.
 pub fn legend(name: &str) -> &str {
-    of(name).unwrap_or(name)
+    if is_meta(name) {
+        ""
+    } else {
+        of(name).unwrap_or(name)
+    }
 }
 
 /// The font to draw a legend in. iced's default font has the arrows but not
@@ -71,6 +80,15 @@ pub fn font(name: &str) -> iced::Font {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn meta_is_drawn_not_glyphed() {
+        assert!(is_meta("Win"));
+        assert!(is_meta("LeftGUI"));
+        assert!(!is_meta("A"));
+        // A meta cap and a meta binding compare equal, so only one Tux shows.
+        assert_eq!(legend("Win"), legend("LeftGUI"));
+    }
 
     #[test]
     fn names_without_a_glyph_in_the_font_stay_text() {
