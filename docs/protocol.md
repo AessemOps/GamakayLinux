@@ -323,6 +323,24 @@ protocol is unchanged and shows the exact packets:
 - It sends one `0xFD` with a zero payload before the rest (purpose unknown;
   not required — our reads and writes work without it).
 
+## Layers
+
+The yc500 family table lists up to 8 layers and the LK67's record carries
+`layer: 8`, but **this board exposes two mappable keymaps: base (`0x89`/`0x09`)
+and Fn (`0x90`/`0x10`)**. Measured on the 2026-10 firmware:
+
+- The keymap read's leading byte does **not** select a layer: `0x89 [n, page]`
+  returns identical pages for every `n` in `0..=7`.
+- The Fn read answers for `n` in `0..=3` (0 and 1 identical, 2 and 3 all-zero)
+  and **errors for `n >= 4`, which stalls the settings endpoint** — do not probe
+  it blindly (it needed a replug).
+- The reference has no layer/profile-switch command, and the captured vendor web
+  driver only ever touches base + Fn, so there is no packet to copy.
+
+Further layers would need a capture of the vendor *desktop* app while it
+switches layers. Until then `gamakay_core::keymap::LAYERS` lists Base and Fn,
+and the GUI's Keymap tab has a selector over exactly that list.
+
 ## Provenance
 
 - `sharkfin` (GPL-3.0-or-later, © JR Lanteigne) — the ROYUAN/`yc500` protocol

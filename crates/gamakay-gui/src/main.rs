@@ -113,7 +113,8 @@ enum Message {
     ApplyLight,
     LightOn,
     LightOff,
-    ToggleFn(bool),
+    /// Switch the layer being edited.
+    Layer(bool),
     SelectSlot(u8),
     /// Bind the selected slot to a value (from the picker or a captured key).
     AssignSlot(SlotValue),
@@ -186,8 +187,8 @@ impl App {
             Message::ApplyLight => self.apply_light(),
             Message::LightOn => self.send(Request::SetBacklightOff(false)),
             Message::LightOff => self.send(Request::SetBacklightOff(true)),
-            Message::ToggleFn(v) => {
-                self.fn_layer = v;
+            Message::Layer(fn_layer) => {
+                self.fn_layer = fn_layer;
                 self.send(Request::Refresh);
             }
             Message::AssignSlot(v) => self.assign_slot(v),
@@ -605,10 +606,25 @@ impl App {
             Some(slot) => format!("Slot {slot} — press a key on the board, or pick one below"),
             None => "Click a key above to select it".to_string(),
         };
+        let layer_buttons: Vec<Element<Message>> = gamakay_core::keymap::LAYERS
+            .iter()
+            .map(|l| {
+                let active = l.fn_layer == self.fn_layer;
+                button(text(l.name).size(12))
+                    .on_press(Message::Layer(l.fn_layer))
+                    .width(Length::Fixed(64.0))
+                    .style(if active {
+                        button::primary
+                    } else {
+                        picker_button
+                    })
+                    .into()
+            })
+            .collect();
         let board = column![
             row![
-                text("Fn layer"),
-                toggler(self.fn_layer).on_toggle(Message::ToggleFn),
+                text("Layer").size(13),
+                row(layer_buttons).spacing(4),
                 horizontal_space(),
                 text(hint).size(13),
             ]

@@ -155,14 +155,25 @@ fn cmd_info(cli: &Cli) -> Result<()> {
     );
     println!("device id:   {id}");
     match record {
-        Some(r) => println!(
-            "model:       {} ({}) [{} family, {} layers, {} profiles]",
-            r.display_name,
-            r.name,
-            r.family.name(),
-            r.layer,
-            r.profiles
-        ),
+        Some(r) => {
+            println!(
+                "model:       {} ({}) [{} family, {} profiles]",
+                r.display_name,
+                r.name,
+                r.family.name(),
+                r.profiles
+            );
+            let names: Vec<&str> = gamakay_core::keymap::LAYERS
+                .iter()
+                .map(|l| l.name)
+                .collect();
+            println!(
+                "layers:      {} (the {} family table lists up to {})",
+                names.join(" + "),
+                r.family.name(),
+                r.layer
+            );
+        }
         None => println!("model:       unknown (no table record for id {id})"),
     }
     if variant {
