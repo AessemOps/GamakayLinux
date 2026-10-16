@@ -241,6 +241,15 @@ committed fixtures are the real captures.
   The LK67's 67 keys land in a non-row-major matrix order (e.g. slot 9 = `A`,
   slot 3 = CapsLock, slot 71 = Fn); the physical layout is therefore derived
   from the layer itself (key name -> slot), not from a static table.
+- **The keymap is US QWERTY while the caps are AZERTY:** slot 8 is `Q` and it
+  sits under the `A` cap, slot 14 is `W` under `Z`, and so on, so the printed
+  legends differ from the keymap names. The GUI preview draws the printed
+  legends (the board as it looks), not the keymap names.
+- **Right column caps read `Ins` / `Del` / `PgDn`** while slots 85 / 86 / 87
+  are `Delete` / `PageUp` / `PageDown`; there is no `Insert` in the keymap at
+  all (`Ins` is Fn+J). The knob is programmable through slots 23 (Vol−), 29
+  (Vol+) and 75 (Play/Pause). The physical positions come from a photo of the
+  board (`crates/gamakay-core/src/layout.rs`).
 - **Single-slot write `0x13` is ignored** on this unit: the write is accepted
   but the slot does not change on read-back. Same for the Fn single write.
 - **Bulk layer write `0x09` works:** `[profile, 0xF8, 1, page]` + 56 bytes at
