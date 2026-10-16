@@ -275,6 +275,13 @@ impl App {
                 locked,
             } => {
                 if fn_layer == self.fn_layer {
+                    // The canvas is about to show a different layer: drop any
+                    // selection, which would otherwise keep the "press a key"
+                    // capture armed on a key the user can no longer see.
+                    if fn_layer != self.shown_fn {
+                        self.selected = None;
+                        self.preview = None;
+                    }
                     self.bindings = slots.iter().cloned().collect();
                     self.layer = slots;
                     self.locked = locked.into_iter().collect();
