@@ -22,6 +22,9 @@ pub const BULK_PAGE_DATA: usize = 56;
 /// Bulk-write pages: eight data pages then the commit page.
 pub const BULK_PAGES: u8 = 9;
 
+/// Extra passes allowed to confirm a layer read (see [`Session::read_layer`]).
+pub const LAYER_READ_TRIES: u32 = 2;
+
 /// The name of a `0x0D` firmware action. The vendor app encodes these as
 /// `[0x0D, parameter, how, 0]` and names two literally (`LEDBIRINC =
 /// [13,2,1,0]`, `LEDBIRDEC = [13,2,2,0]`); the rest follow the same shape and
@@ -237,6 +240,24 @@ impl Keymap {
 impl Session<'_> {
     /// Read a whole layer (`0x89` base, `0x90` Fn) as eight raw pages.
     pub fn read_layer(&mut self, profile: u8, fn_layer: bool) -> Result<Keymap> {
+        // A raw page read takes whatever report is ready after the settle. When
+        // the board is slower than that, a page read returns the *previous*
+        // request's page, which silently mixes the two keymaps — the Fn layer's
+        // values turning up on the base layer. Read twice and only trust a
+        // pass that repeats; a lagging read differs between passes. **[HW]**
+        let mut last = self.read_layer_once(profile, fn_layer)?;
+        for _ in 0..LAYER_READ_TRIES {
+            let again = self.read_layer_once(profile, fn_layer)?;
+            if again == last {
+                return Ok(again);
+            }
+            last = again;
+        }
+        Ok(last)
+    }
+
+    /// One read of every page of a layer, taken as it comes.
+    fn read_layer_once(&mut self, profile: u8, fn_layer: bool) -> Result<Keymap> {
         let opcode = if fn_layer {
             cmd::GET_FN
         } else {
