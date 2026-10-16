@@ -11,6 +11,7 @@ use iced::{Color, Length, Point, Rectangle, Renderer, Size, Theme, alignment, mo
 use gamakay_core::layout::{LK67_HEIGHT, LK67_LAYOUT, LK67_WIDTH, LayoutKey};
 
 use crate::Message;
+use crate::glyph;
 use crate::patterns::{self, Params};
 
 const GAP: f32 = 4.0;
@@ -146,8 +147,9 @@ impl Program<Message> for Keyboard<'_> {
 
             // The key legend.
             frame.fill_text(Text {
-                content: k.label.to_string(),
+                content: glyph::legend(k.label).to_string(),
                 position: Point::new(rect.center_x(), rect.y + rect.height * 0.18),
+                font: glyph::font(k.label),
                 color: TEXT,
                 size: iced::Pixels((scale * 0.26).clamp(8.0, 18.0)),
                 horizontal_alignment: alignment::Horizontal::Center,
@@ -163,11 +165,12 @@ impl Program<Message> for Keyboard<'_> {
                 .map(|(_, v)| (v.as_str(), PREVIEW));
             let current = self.bindings.get(&k.slot).map(|v| (v.as_str(), BINDING));
             if let Some((text, color)) = preview.or(current)
-                && text != k.label
+                && glyph::legend(text) != glyph::legend(k.label)
             {
                 frame.fill_text(Text {
-                    content: text.to_string(),
+                    content: glyph::legend(text).to_string(),
                     position: Point::new(rect.center_x(), rect.y + rect.height * 0.62),
+                    font: glyph::font(text),
                     color,
                     size: iced::Pixels((scale * 0.2).clamp(7.0, 13.0)),
                     horizontal_alignment: alignment::Horizontal::Center,

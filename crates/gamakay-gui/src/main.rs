@@ -6,6 +6,7 @@
 mod canvas;
 mod color;
 mod colorwheel;
+mod glyph;
 mod keypicker;
 mod patterns;
 mod physical;
@@ -478,20 +479,24 @@ impl App {
                     let y = (k.y + k.h / 2.0) / LK67_HEIGHT;
                     let c = patterns::color_at(&p, x, y, k.slot as usize, frame);
                     let radius = if k.knob { (unit - pad) / 2.0 } else { 5.0 };
-                    let key = container(text(k.label).size(11))
-                        .width(Length::Fixed(k.w * unit - pad))
-                        .height(Length::Fixed(unit - pad))
-                        .align_x(iced::Alignment::Center)
-                        .align_y(iced::Alignment::Center)
-                        .style(move |_: &Theme| container::Style {
-                            background: Some(Background::Color(c)),
-                            border: Border {
-                                radius: radius.into(),
-                                width: 0.0,
-                                color: Color::TRANSPARENT,
-                            },
-                            ..container::Style::default()
-                        });
+                    let key = container(
+                        text(glyph::legend(k.label))
+                            .size(11)
+                            .font(glyph::font(k.label)),
+                    )
+                    .width(Length::Fixed(k.w * unit - pad))
+                    .height(Length::Fixed(unit - pad))
+                    .align_x(iced::Alignment::Center)
+                    .align_y(iced::Alignment::Center)
+                    .style(move |_: &Theme| container::Style {
+                        background: Some(Background::Color(c)),
+                        border: Border {
+                            radius: radius.into(),
+                            width: 0.0,
+                            color: Color::TRANSPARENT,
+                        },
+                        ..container::Style::default()
+                    });
                     cells.push(
                         container(key)
                             .width(Length::Fixed(k.w * unit))
