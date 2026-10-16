@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! Small marks drawn with canvas paths, for legends that are not glyphs: the
-//! Meta key's penguin and the Android/iOS Fn functions (whose only font here is
-//! the colour-emoji one, which this renderer cannot draw as text).
+//! The one mark drawn with canvas paths: the Meta key's penguin. There is no
+//! Tux glyph anywhere, and the emoji penguin is a different bird. Everything
+//! else the Fn layer needs comes from a font (`glyph.rs`).
 //!
 //! Each is filled in the key's own colour and drawn in ink, so the same code
 //! works on the dark board and on a lit key preview.
@@ -19,8 +19,6 @@ const INK: Color = Color::from_rgb(0.90, 0.92, 0.96);
 pub fn draw(frame: &mut Frame, icon: Icon, rect: Rectangle, paper: Color) {
     match icon {
         Icon::Tux => tux(frame, rect, paper),
-        Icon::Android => android(frame, rect, paper),
-        Icon::Phone => phone(frame, rect, paper),
     }
 }
 
@@ -65,65 +63,6 @@ fn tux(frame: &mut Frame, rect: Rectangle, paper: Color) {
             INK,
         );
     }
-}
-
-fn android(frame: &mut Frame, rect: Rectangle, paper: Color) {
-    let s = rect.width.min(rect.height);
-    let c = rect.center();
-    // A dome: an ink disc with its lower half covered.
-    frame.fill(
-        &Path::circle(Point::new(c.x, c.y + 0.04 * s), 0.40 * s),
-        INK,
-    );
-    frame.fill(
-        &Path::rectangle(
-            Point::new(c.x - 0.42 * s, c.y + 0.06 * s),
-            Size::new(0.84 * s, 0.40 * s),
-        ),
-        paper,
-    );
-    if s >= 11.0 {
-        for dx in [-0.15_f32, 0.15] {
-            frame.fill(
-                &Path::circle(Point::new(c.x + dx * s, c.y - 0.06 * s), 0.055 * s),
-                paper,
-            );
-        }
-        // Antennae.
-        for dx in [-0.26_f32, 0.26] {
-            frame.fill(
-                &Path::rounded_rectangle(
-                    Point::new(c.x + dx * s - 0.035 * s, c.y - 0.50 * s),
-                    Size::new(0.07 * s, 0.22 * s),
-                    (0.035 * s).into(),
-                ),
-                INK,
-            );
-        }
-    }
-}
-
-fn phone(frame: &mut Frame, rect: Rectangle, paper: Color) {
-    let s = rect.width.min(rect.height);
-    let c = rect.center();
-    let body = Path::rounded_rectangle(
-        Point::new(c.x - 0.28 * s, c.y - 0.46 * s),
-        Size::new(0.56 * s, 0.92 * s),
-        (0.12 * s).into(),
-    );
-    frame.fill(&body, INK);
-    // Screen and home button.
-    frame.fill(
-        &Path::rectangle(
-            Point::new(c.x - 0.19 * s, c.y - 0.33 * s),
-            Size::new(0.38 * s, 0.55 * s),
-        ),
-        paper,
-    );
-    frame.fill(
-        &Path::circle(Point::new(c.x, c.y + 0.33 * s), 0.075 * s),
-        paper,
-    );
 }
 
 /// A mark as a widget, for the preview grids.

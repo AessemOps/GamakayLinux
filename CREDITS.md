@@ -36,6 +36,20 @@ this file records what was used and how. `Last reviewed: 2026-10-16`.
   only and is **never** committed, bundled or linked. `docs/protocol.md`'s
   **[REF]** rows, the opcode table and the layer findings come from it.
 
+### Noto Emoji (bundled font)
+
+- Project: [Noto Emoji](https://fonts.google.com/noto/specimen/Noto+Emoji),
+  © Google, **SIL Open Font License 1.1**.
+- What: the monochrome emoji font.
+- How used: bundled as `crates/gamakay-gui/assets/NotoEmoji.ttf`, with its
+  licence alongside as `NotoEmoji-OFL.txt`, and loaded at startup. It is the
+  only font available here with the emoji the keyboard previews draw (⏸ 🔒 🍎
+  🤖): DejaVu Sans has none of them, the packaged Noto fonts are missing some,
+  and the colour-emoji font cannot be rendered as text by this renderer.
+- Reason GPL-compatible: the OFL 1.1 permits bundling and requires the licence
+  to travel with the font, which it does. The font stays under the OFL and is
+  not linked into the program.
+
 ## Direct dependencies
 
 Bump the `Last reviewed` line above when any of these change.

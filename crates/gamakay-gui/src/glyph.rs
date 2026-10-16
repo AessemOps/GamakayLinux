@@ -8,23 +8,21 @@
 //! fonts (`fc-list :charset=…`).
 //!
 //! Some legends are drawn instead of typed (`Icon`): the Meta penguin, and the
-//! Android/iOS marks, which exist only in the colour-emoji font this renderer
-//! cannot use.
+//! Android/iOS marks. Their glyphs (🤖, 🍎, ) exist only in the colour-emoji
+//! font, or nowhere at all, so no font here can render them as text.
 
 /// DejaVu Sans carries most of the symbols.
 const DV: &str = "DejaVu Sans";
-/// Noto Sans Symbols 2 has the few DejaVu lacks (⏸, 🔒, …).
-const NS: &str = "Noto Sans Symbols 2";
+/// Noto Emoji (monochrome, bundled in `assets/`) carries the emoji: ⏸, 🔒, 🍎
+/// and 🤖 — none of which is in DejaVu, and no packaged font here has them.
+const NE: &str = "Noto Emoji";
 
-/// A legend drawn with canvas paths.
+/// A legend drawn with canvas paths. Only the penguin needs this: there is no
+/// Tux glyph, and the emoji penguin is a different bird.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icon {
     /// Linux's penguin, for the Meta key.
     Tux,
-    /// The Android robot.
-    Android,
-    /// A phone, for iOS.
-    Phone,
 }
 
 /// The symbol and the font family that has it.
@@ -51,16 +49,16 @@ fn entry(name: &str) -> Option<(&'static str, &'static str)> {
         "Left" => ("\u{2190}", DV),                   // ←
         "Right" => ("\u{2192}", DV),                  // →
         "Menu" => ("\u{2630}", DV),                   // ☰
-        "Pause" => ("\u{23f8}", NS),                  // ⏸ (not in DejaVu)
+        "Pause" => ("\u{23f8}", NE),                  // ⏸ (not in DejaVu)
         "ScrollLock" => ("\u{21f3}", DV),             // ⇳
         "Eject" => ("\u{23cf}", DV),                  // ⏏
         "Play/Pause" => ("\u{25b6}", DV),             // ▶
         // The firmware's Fn functions.
-        "Lock Win Key" => ("\u{1f512}", NS), // 🔒
+        "Lock Win Key" => ("\u{1f512}", NE), // 🔒
         "Windows mode" => ("\u{229e}", DV),  // ⊞
         "macOS mode" => ("\u{2318}", DV),    // ⌘
-        "Android mode" => return None,       // drawn
-        "iOS mode" => return None,           // drawn
+        "Android mode" => ("\u{1f916}", NE), // 🤖
+        "iOS mode" => ("\u{1f34e}", NE),     // 🍎
         // Punctuation keeps its character, which is also what the cap shows.
         "Minus" => ("-", DV),
         "Equal" => ("=", DV),
@@ -87,8 +85,6 @@ pub fn of(name: &str) -> Option<&'static str> {
 pub fn icon(name: &str) -> Option<Icon> {
     match name.trim() {
         "Win" | "GUI" | "LeftGUI" | "RightGUI" | "Meta" => Some(Icon::Tux),
-        "Android mode" => Some(Icon::Android),
-        "iOS mode" => Some(Icon::Phone),
         _ => None,
     }
 }
@@ -121,22 +117,49 @@ mod tests {
     use super::*;
 
     #[test]
-    fn meta_and_the_os_marks_are_drawn_not_glyphed() {
+    fn only_the_penguin_is_drawn() {
         assert_eq!(icon("Win"), Some(Icon::Tux));
         assert_eq!(icon("LeftGUI"), Some(Icon::Tux));
-        assert_eq!(icon("Android mode"), Some(Icon::Android));
-        assert_eq!(icon("iOS mode"), Some(Icon::Phone));
         assert_eq!(icon("A"), None);
+        assert_eq!(icon("Android mode"), None);
         // A drawn cap and a drawn binding compare equal, so only one is drawn.
         assert_eq!(legend("Win"), legend("LeftGUI"));
-        assert_eq!(legend("Android mode"), "");
+        assert_eq!(legend("Win"), "");
+    }
+
+    /// The bundled font must really have every glyph we point at it, or the
+    /// key renders a tofu box — exactly how the small O key broke (`Pause`).
+    #[test]
+    fn the_bundled_font_has_every_glyph_we_ask_it_for() {
+        const FONT: &[u8] = include_bytes!("../assets/NotoEmoji.ttf");
+        let face = ttf_parser::Face::parse(FONT, 0).expect("the bundled font parses");
+        let asked: Vec<u32> = ["Pause", "Lock Win Key", "Android mode", "iOS mode"]
+            .iter()
+            .filter_map(|n| entry(n))
+            .filter(|(_, family)| *family == NE)
+            .filter_map(|(sym, _)| sym.chars().next())
+            .map(u32::from)
+            .collect();
+        assert!(
+            asked.len() >= 4,
+            "expected several emoji legends, got {asked:?}"
+        );
+        for cp in asked {
+            let c = char::from_u32(cp).expect("bmp");
+            assert!(
+                face.glyph_index(c).is_some(),
+                "U+{cp:04X} is missing from the bundled font"
+            );
+        }
     }
 
     #[test]
     fn symbols_come_from_a_font_that_has_them() {
         // ⏸ is not in DejaVu Sans; the small O key used to render a tofu box.
-        assert_eq!(entry("Pause"), Some(("\u{23f8}", NS)));
-        assert_eq!(entry("Lock Win Key"), Some(("\u{1f512}", NS)));
+        assert_eq!(entry("Pause"), Some(("\u{23f8}", NE)));
+        assert_eq!(entry("Lock Win Key"), Some(("\u{1f512}", NE)));
+        assert_eq!(entry("Android mode"), Some(("\u{1f916}", NE)));
+        assert_eq!(entry("iOS mode"), Some(("\u{1f34e}", NE)));
         assert_eq!(entry("Backspace"), Some(("\u{232b}", DV)));
         assert_eq!(entry("Windows mode"), Some(("\u{229e}", DV)));
         assert_eq!(entry("macOS mode"), Some(("\u{2318}", DV)));

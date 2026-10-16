@@ -37,6 +37,9 @@ fn main() -> iced::Result {
     iced::application("GamaKay", App::update, App::view)
         .subscription(App::subscription)
         .theme(App::theme)
+        // Monochrome Noto Emoji, bundled: it is the only font here with the
+        // emoji the previews use (⏸ 🔒 🍎 🤖). See CREDITS.md.
+        .font(include_bytes!("../assets/NotoEmoji.ttf").as_slice())
         .window_size(iced::Size::new(1280.0, 820.0))
         .run()
 }

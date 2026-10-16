@@ -190,7 +190,7 @@ impl Program<Message> for Keyboard<'_> {
                 && glyph::legend(text) != glyph::legend(k.label)
             {
                 if let Some(icon) = glyph::icon(text) {
-                    let s = rect.height * 0.38;
+                    let s = rect.height * 0.44;
                     icons::draw(
                         &mut frame,
                         icon,
