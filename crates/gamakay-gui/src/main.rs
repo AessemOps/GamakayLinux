@@ -32,7 +32,7 @@ fn main() -> iced::Result {
     iced::application("GamaKay", App::update, App::view)
         .subscription(App::subscription)
         .theme(App::theme)
-        .window_size(iced::Size::new(1100.0, 760.0))
+        .window_size(iced::Size::new(1280.0, 820.0))
         .run()
 }
 
@@ -433,7 +433,7 @@ impl App {
         let pad = 4.0f32;
 
         let mut rows: BTreeMap<i32, Vec<&LayoutKey>> = BTreeMap::new();
-        for k in LK67_LAYOUT.iter().filter(|k| !k.knob) {
+        for k in LK67_LAYOUT.iter() {
             rows.entry(k.y as i32).or_default().push(k);
         }
 
@@ -451,8 +451,9 @@ impl App {
                     let x = (k.x + k.w / 2.0) / LK67_WIDTH;
                     let y = (k.y + k.h / 2.0) / LK67_HEIGHT;
                     let c = patterns::color_at(&p, x, y, k.slot as usize, frame);
+                    let radius = if k.knob { unit / 2.0 } else { 5.0 };
                     cells.push(
-                        container(text("").size(11))
+                        container(text(k.label).size(11))
                             .width(Length::Fixed(k.w * unit - pad))
                             .height(Length::Fixed(unit - pad))
                             .align_x(iced::Alignment::Center)
@@ -460,7 +461,7 @@ impl App {
                             .style(move |_: &Theme| container::Style {
                                 background: Some(Background::Color(c)),
                                 border: Border {
-                                    radius: 5.0.into(),
+                                    radius: radius.into(),
                                     width: 0.0,
                                     color: Color::TRANSPARENT,
                                 },
@@ -470,7 +471,7 @@ impl App {
                     );
                     prev_end = k.x + k.w;
                 }
-                Element::from(row(cells))
+                Element::from(row(cells).spacing(2.0))
             })
             .collect();
         column(rows_el).spacing(pad).into()
