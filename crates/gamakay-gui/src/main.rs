@@ -6,7 +6,9 @@
 mod canvas;
 mod color;
 mod colorwheel;
+mod keypicker;
 mod patterns;
+mod physical;
 mod worker;
 
 use std::collections::BTreeMap;
@@ -20,7 +22,7 @@ use iced::widget::{
 };
 use iced::{Background, Border, Color, Element, Length, Subscription, Theme};
 
-use gamakay_core::keymap::SlotValue;
+use gamakay_core::keymap::{Slot, SlotValue};
 use gamakay_core::layout::{LK67_HEIGHT, LK67_LAYOUT, LK67_WIDTH, LayoutKey};
 use gamakay_core::light::{LK67_FLAGS, LedParam, LedState, Mode};
 use worker::{Event, Request, Summary};
@@ -111,9 +113,11 @@ enum Message {
     LightOn,
     LightOff,
     ToggleFn(bool),
-    SlotEdit(String),
-    SlotApply,
     SelectSlot(u8),
+    /// Bind the selected slot to a value (from the picker or a captured key).
+    AssignSlot(SlotValue),
+    /// A physical key was pressed while a slot is selected.
+    Capture(iced::keyboard::key::Physical),
     PickColor(f32, f32),
     Tick,
     MacroSlot(String),
@@ -182,25 +186,24 @@ impl App {
                 self.fn_layer = v;
                 self.send(Request::Refresh);
             }
-            Message::SlotEdit(s) => {
-                self.preview = parse_preview(&s);
-                self.slot_edit = s;
-            }
-            Message::SlotApply => self.apply_slot(),
+            Message::AssignSlot(v) => self.assign_slot(v),
+            Message::Capture(physical) => match physical::usage(&physical) {
+                Some(u) => self.assign_slot(SlotValue::Hid(u)),
+                None => self.status = "that key can't be sent by the board".into(),
+            },
             Message::PickColor(h, s) => {
                 self.color = color::to_hex(rgb8(color::hsv_to_rgb(h, s, 1.0)));
             }
             Message::Tick => self.phase += 0.04,
             Message::SelectSlot(slot) => {
                 self.selected = Some(slot);
-                let cur = self
+                self.slot_edit = self
                     .layer
                     .iter()
                     .find(|(s, _)| *s == slot)
                     .map(|(_, d)| d.clone())
-                    .unwrap_or_default();
-                self.slot_edit = format!("{slot}:{cur}");
-                self.preview = parse_preview(&self.slot_edit);
+                    .unwrap_or_else(|| "-".into());
+                self.preview = None;
             }
             Message::MacroSlot(s) => self.macro_slot = s,
             Message::MacroSteps(s) => self.macro_steps = s,
@@ -264,26 +267,16 @@ impl App {
         self.send(Request::SetBacklight(p));
     }
 
-    fn apply_slot(&mut self) {
-        let Some((slot, key)) = self.slot_edit.split_once(':') else {
-            self.status = "enter `slot:key` (e.g. 3:Esc)".into();
+    /// Bind the selected slot. The write is fire-and-forget, so the new value
+    /// is shown at once as a preview on the board.
+    fn assign_slot(&mut self, value: SlotValue) {
+        let Some(slot) = self.selected else {
+            self.status = "select a key on the board first".into();
             return;
         };
-        let Ok(slot) = slot.trim().parse::<u8>() else {
-            self.status = "slot must be a number".into();
-            return;
-        };
-        let value = if key.trim().eq_ignore_ascii_case("none") {
-            SlotValue::Empty
-        } else {
-            match gamakay_core::keycode::usage(key.trim()) {
-                Some(u) => SlotValue::Hid(u),
-                None => {
-                    self.status = format!("unknown key {:?}", key.trim());
-                    return;
-                }
-            }
-        };
+        let desc = Slot::from_value(value).describe();
+        self.preview = Some((slot, desc.clone()));
+        self.slot_edit = desc;
         self.send(Request::SetSlot {
             fn_layer: self.fn_layer,
             slot,
@@ -307,15 +300,18 @@ impl App {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        let events = Subscription::run(event_stream).map(Message::Worker);
+        let mut subs = vec![Subscription::run(event_stream).map(Message::Worker)];
         if self.tab == Tab::Lighting {
-            Subscription::batch([
-                events,
+            subs.push(
                 iced::time::every(std::time::Duration::from_millis(40)).map(|_| Message::Tick),
-            ])
-        } else {
-            events
+            );
         }
+        // While a key is selected on the Keymap tab, the next key press binds
+        // it — the VIA "press a key" flow.
+        if self.tab == Tab::Keymap && self.selected.is_some() {
+            subs.push(iced::event::listen_with(capture_key));
+        }
+        Subscription::batch(subs)
     }
 
     fn theme(_: &App) -> Theme {
@@ -599,17 +595,24 @@ impl App {
             preview: self.preview.clone(),
             lighting: None,
         });
-        let editing = match self.selected {
-            Some(slot) => format!("Editing slot {slot}"),
-            None => "Click a key on the board to edit it".to_string(),
+        let hint = match self.selected {
+            Some(slot) => format!("Slot {slot} — press a key on the board, or pick one below"),
+            None => "Click a key above to select it".to_string(),
         };
-        let editor = row![
-            text_input("slot:key (e.g. 3:Esc)", &self.slot_edit).on_input(Message::SlotEdit),
-            button(text("Apply"))
-                .on_press(Message::SlotApply)
-                .style(button::primary),
+        let board = column![
+            row![
+                text("Fn layer"),
+                toggler(self.fn_layer).on_toggle(Message::ToggleFn),
+                horizontal_space(),
+                text(hint).size(13),
+            ]
+            .spacing(10)
+            .align_y(iced::Alignment::Center),
+            Element::from(kb),
         ]
-        .spacing(8);
+        .spacing(10)
+        .width(Length::Fill);
+
         let list = column(self.layer.iter().map(|(slot, desc)| {
             let mark = if self.selected == Some(*slot) {
                 "●"
@@ -619,25 +622,29 @@ impl App {
             Element::from(text(format!("{mark} slot {slot:>3}   {desc}")))
         }))
         .spacing(2);
+
         column![
-            section(
-                "Layer".to_string(),
-                row![
-                    text("Fn layer"),
-                    toggler(self.fn_layer).on_toggle(Message::ToggleFn),
-                    horizontal_space(),
-                    text(editing).size(13),
-                ]
-                .spacing(10)
-                .align_y(iced::Alignment::Center)
-                .into()
-            ),
-            section("Board".to_string(), kb.into()),
-            section("Rebind".to_string(), editor.into()),
+            section("Board".to_string(), board.into()),
+            section("Pick a key".to_string(), self.key_picker()),
             section("Slots".to_string(), list.into()),
         ]
         .spacing(12)
         .into()
+    }
+
+    /// The VIA-style picker: every key the board can send, in categories.
+    fn key_picker(&self) -> Element<'_, Message> {
+        let groups: Vec<Element<Message>> = keypicker::CATEGORIES
+            .iter()
+            .map(|(name, entries)| {
+                column![text(*name).size(12), key_grid(entries)]
+                    .spacing(6)
+                    .into()
+            })
+            .collect();
+        scrollable(column(groups).spacing(16))
+            .height(Length::Fixed(300.0))
+            .into()
     }
 
     fn view_macros(&self) -> Element<'_, Message> {
@@ -768,6 +775,65 @@ fn slider_row<'a>(
     field_row(label, control)
 }
 
+/// Map an *ignored* key press into a capture message, so a focused text field
+/// still receives its keystrokes.
+fn capture_key(
+    event: iced::Event,
+    status: iced::event::Status,
+    _window: iced::window::Id,
+) -> Option<Message> {
+    if status != iced::event::Status::Ignored {
+        return None;
+    }
+    match event {
+        iced::Event::Keyboard(iced::keyboard::Event::KeyPressed { physical_key, .. }) => {
+            Some(Message::Capture(physical_key))
+        }
+        _ => None,
+    }
+}
+
+/// A grid of picker buttons.
+fn key_grid(entries: &[keypicker::Entry]) -> Element<'static, Message> {
+    const PER_ROW: usize = 8;
+    let rows: Vec<Element<Message>> = entries
+        .chunks(PER_ROW)
+        .map(|chunk| {
+            let cells: Vec<Element<Message>> = chunk
+                .iter()
+                .map(|(label, value)| {
+                    button(text(*label).size(11))
+                        .on_press(Message::AssignSlot(*value))
+                        .width(Length::Fixed(76.0))
+                        .style(picker_button)
+                        .into()
+                })
+                .collect();
+            row(cells).spacing(4).into()
+        })
+        .collect();
+    column(rows).spacing(4).into()
+}
+
+/// A compact key-picker button.
+fn picker_button(_: &Theme, status: button::Status) -> button::Style {
+    let hovered = matches!(status, button::Status::Hovered | button::Status::Pressed);
+    button::Style {
+        background: Some(Background::Color(if hovered {
+            Color::from_rgb(0.24, 0.28, 0.34)
+        } else {
+            Color::from_rgb(0.16, 0.18, 0.22)
+        })),
+        text_color: Color::from_rgb(0.85, 0.88, 0.92),
+        border: Border {
+            radius: 5.0.into(),
+            width: 1.0,
+            color: Color::from_rgb(0.24, 0.27, 0.32),
+        },
+        ..button::Style::default()
+    }
+}
+
 /// The lighting action buttons.
 fn light_buttons() -> Element<'static, Message> {
     row![
@@ -822,12 +888,6 @@ fn event_stream() -> UnboundedReceiver<Event> {
         .unwrap_or_else(|| unbounded().1)
 }
 
-fn parse_preview(s: &str) -> Option<(u8, String)> {
-    let (slot, key) = s.split_once(':')?;
-    let slot = slot.trim().parse::<u8>().ok()?;
-    Some((slot, key.trim().to_string()))
-}
-
 /// Round an `iced::Color` (0..=1) to 8-bit RGB.
 fn rgb8(c: Color) -> [u8; 3] {
     [
@@ -835,4 +895,36 @@ fn rgb8(c: Color) -> [u8; 3] {
         (c.g * 255.0).round() as u8,
         (c.b * 255.0).round() as u8,
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use iced::keyboard::Event as KbEvent;
+    use iced::keyboard::key::{Code, Named, Physical};
+    use iced::keyboard::{Key, Location, Modifiers};
+
+    fn press(code: Code) -> iced::Event {
+        let key = Key::Named(Named::Escape);
+        iced::Event::Keyboard(KbEvent::KeyPressed {
+            key: key.clone(),
+            modified_key: key,
+            physical_key: Physical::Code(code),
+            location: Location::Standard,
+            modifiers: Modifiers::default(),
+            text: None,
+        })
+    }
+
+    /// The capture must only take keys no widget handled, so typing in a text
+    /// field is never swallowed.
+    #[test]
+    fn capture_takes_ignored_key_presses_only() {
+        let id = iced::window::Id::unique();
+        assert!(matches!(
+            capture_key(press(Code::KeyA), iced::event::Status::Ignored, id),
+            Some(Message::Capture(_))
+        ));
+        assert!(capture_key(press(Code::KeyA), iced::event::Status::Captured, id).is_none());
+    }
 }
