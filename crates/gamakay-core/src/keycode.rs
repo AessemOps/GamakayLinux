@@ -175,6 +175,17 @@ const CONSUMER: &[(u16, &str)] = &[
     (0x00E2, "Mute"),
     (0x00E9, "Vol+"),
     (0x00EA, "Vol-"),
+    (0x0183, "Config"),
+    (0x0192, "Calculator"),
+    (0x0221, "Search"),
+    (0x0223, "Home page"),
+    (0x0224, "Back"),
+    (0x0225, "Forward"),
+    (0x0226, "Stop"),
+    (0x0227, "Refresh"),
+    (0x022A, "Bookmarks"),
+    (0x00B0, "Play"),
+    (0x00B1, "Pause"),
 ];
 
 /// The name of a consumer usage, if it is a common one.

@@ -22,6 +22,27 @@ pub const BULK_PAGE_DATA: usize = 56;
 /// Bulk-write pages: eight data pages then the commit page.
 pub const BULK_PAGES: u8 = 9;
 
+/// The name of a `0x0D` firmware action. The vendor app encodes these as
+/// `[0x0D, parameter, how, 0]` and names two literally (`LEDBIRINC =
+/// [13,2,1,0]`, `LEDBIRDEC = [13,2,2,0]`); the rest follow the same shape and
+/// the LK67's Fn layer uses exactly these, matching the manual's Fn combos
+/// (Fn+Del, Fn+PgUp/PgDn, Fn+arrows).
+fn action_name(param: u8, how: u8) -> String {
+    let param = match param {
+        1 => "Light",
+        2 => "Bright",
+        3 => "Speed",
+        8 => "Side",
+        _ => return format!("fn {param:02x} {how:02x}"),
+    };
+    match how {
+        0 => format!("{param} mode"),
+        1 => format!("{param} +"),
+        2 => format!("{param} -"),
+        _ => format!("{param} {how}"),
+    }
+}
+
 // The keymap is **per profile**: `0x05` (`SET_PROFILE`) selects the active
 // profile and the keymap commands always address it, so a profile is what the
 // vendor UI calls a "layer". The yc500 device table's `layer` field is this
@@ -47,9 +68,16 @@ pub enum SlotValue {
     Macro { mode: u8, index: u8 },
     /// A special function: 1 Fn, 12 power save, 17 Caps LED swap.
     Special(u8),
-    /// A firmware action (tag `0x0D`): the lighting/media controls the firmware
-    /// runs itself. Seen on the LK67's Fn layer for brightness/speed/mode.
+    /// A firmware action (tag `0x0D`): the lighting controls the firmware runs
+    /// itself. `a` is the parameter, `b` how to move it.
     Action { a: u8, b: u8 },
+    /// A profile action (tag `0x08`): the vendor's `profile_value` /
+    /// `profile_loop` / `profile_exchange` family. `kind` 4 selects a profile,
+    /// `index` which one (zero based).
+    Profile { kind: u8, index: u8 },
+    /// An OS-mode switch (tag `0x0E`): 0 Windows, 1 macOS, 2 Android, 3 iOS —
+    /// the app's `fnSys` encoding.
+    OsMode(u8),
     /// A tag we do not model; kept verbatim so writes round-trip.
     Unknown([u8; 4]),
 }
@@ -70,6 +98,8 @@ impl Slot {
             0x09 => SlotValue::Macro { mode: a, index: b },
             0x0A => SlotValue::Special(a),
             0x0D => SlotValue::Action { a, b },
+            0x08 => SlotValue::Profile { kind: b, index: c },
+            0x0E => SlotValue::OsMode(b),
             _ => SlotValue::Unknown(self.0),
         }
     }
@@ -95,6 +125,8 @@ impl Slot {
             SlotValue::Macro { mode, index } => Slot([0x09, mode, index, 0]),
             SlotValue::Special(s) => Slot([0x0A, s, 0, 0]),
             SlotValue::Action { a, b } => Slot([0x0D, a, b, 0]),
+            SlotValue::Profile { kind, index } => Slot([0x08, 0, kind, index]),
+            SlotValue::OsMode(n) => Slot([0x0E, 0, n, 0]),
             SlotValue::Unknown(raw) => Slot(raw),
         }
     }
@@ -118,12 +150,28 @@ impl Slot {
                     .unwrap_or("?");
                 format!("macro {index} ({m})")
             }
-            SlotValue::Action { a, b } => format!("fn action {a:02x} {b:02x}"),
+            SlotValue::Action { a, b } => action_name(a, b),
+            SlotValue::Profile { kind, index } => match kind {
+                4 => format!("Profile {}", index + 1),
+                3 => "Profile loop".to_string(),
+                0 => "Profile value".to_string(),
+                _ => format!("Profile {kind}:{index}"),
+            },
+            SlotValue::OsMode(n) => match n {
+                0 => "Windows mode".to_string(),
+                1 => "macOS mode".to_string(),
+                2 => "Android mode".to_string(),
+                3 => "iOS mode".to_string(),
+                _ => format!("OS mode {n}"),
+            },
             SlotValue::Special(s) => match s {
                 1 => "Fn".to_string(),
-                12 => "power-save".to_string(),
-                17 => "caps-led".to_string(),
-                _ => format!("special {s}"),
+                3 => "Lock Win Key".to_string(),
+                12 => "Backlight on/off".to_string(),
+                17 => "Caps LED".to_string(),
+                // 8 sits on Space in the Fn layer and is not in any vendor
+                // table; unnamed until it is identified.
+                _ => format!("Fn function {s}"),
             },
             SlotValue::Unknown(r) => {
                 format!("raw {:02x} {:02x} {:02x} {:02x}", r[0], r[1], r[2], r[3])
@@ -268,6 +316,9 @@ mod tests {
             SlotValue::Macro { mode: 1, index: 5 },
             SlotValue::Special(1),
             SlotValue::Action { a: 2, b: 1 },
+            SlotValue::Action { a: 3, b: 2 },
+            SlotValue::Profile { kind: 4, index: 2 },
+            SlotValue::OsMode(1),
             SlotValue::Unknown([0x42, 1, 2, 3]),
         ] {
             assert_eq!(Slot::from_value(v).value(), v, "round trip {v:?}");
