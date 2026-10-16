@@ -12,8 +12,8 @@ use gamakay_core::layout::{LK67_HEIGHT, LK67_LAYOUT, LK67_WIDTH, LayoutKey};
 
 use crate::Message;
 use crate::glyph;
+use crate::icons;
 use crate::patterns::{self, Params};
-use crate::tux;
 
 const GAP: f32 = 4.0;
 const RADIUS: f32 = 5.0;
@@ -154,11 +154,12 @@ impl Program<Message> for Keyboard<'_> {
                 );
             }
 
-            // The key legend: a drawn Tux for the Meta key, else text.
-            if glyph::is_meta(k.label) {
+            // The key legend: a drawn mark where there is one, else text.
+            if let Some(icon) = glyph::icon(k.label) {
                 let s = rect.height * 0.54;
-                tux::draw(
+                icons::draw(
                     &mut frame,
+                    icon,
                     Rectangle::new(
                         Point::new(rect.center_x() - s / 2.0, rect.y + rect.height * 0.12),
                         Size::new(s, s),
@@ -188,12 +189,13 @@ impl Program<Message> for Keyboard<'_> {
             if let Some((text, color)) = preview.or(current)
                 && glyph::legend(text) != glyph::legend(k.label)
             {
-                if glyph::is_meta(text) {
-                    let s = rect.height * 0.34;
-                    tux::draw(
+                if let Some(icon) = glyph::icon(text) {
+                    let s = rect.height * 0.38;
+                    icons::draw(
                         &mut frame,
+                        icon,
                         Rectangle::new(
-                            Point::new(rect.center_x() - s / 2.0, rect.y + rect.height * 0.62),
+                            Point::new(rect.center_x() - s / 2.0, rect.y + rect.height * 0.60),
                             Size::new(s, s),
                         ),
                         fill,

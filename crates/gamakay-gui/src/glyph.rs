@@ -2,78 +2,117 @@
 //! Key legends as symbols where a conventional one exists, so the keyboard
 //! previews read like real keycaps instead of spelling everything out.
 //!
-//! A left/right pair maps to the same symbol — as on a real keycap, where the
-//! key's position says which one it is.
+//! Each symbol carries the font family that actually has it: iced does not
+//! fall back to the system fonts, so a glyph missing from the chosen family
+//! renders as a tofu box. Everything here was checked against the installed
+//! fonts (`fc-list :charset=…`).
+//!
+//! Some legends are drawn instead of typed (`Icon`): the Meta penguin, and the
+//! Android/iOS marks, which exist only in the colour-emoji font this renderer
+//! cannot use.
 
-/// The symbol for a key legend, if there is a conventional one.
-pub fn of(name: &str) -> Option<&'static str> {
+/// DejaVu Sans carries most of the symbols.
+const DV: &str = "DejaVu Sans";
+/// Noto Sans Symbols 2 has the few DejaVu lacks (⏸, 🔒, …).
+const NS: &str = "Noto Sans Symbols 2";
+
+/// A legend drawn with canvas paths.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Icon {
+    /// Linux's penguin, for the Meta key.
+    Tux,
+    /// The Android robot.
+    Android,
+    /// A phone, for iOS.
+    Phone,
+}
+
+/// The symbol and the font family that has it.
+fn entry(name: &str) -> Option<(&'static str, &'static str)> {
     Some(match name {
-        "Tab" => "\u{21e5}",                                // ⇥
-        "Caps Lock" | "CapsLock" => "\u{21ea}",             // ⇪
-        "Shift" | "LeftShift" | "RightShift" => "\u{21e7}", // ⇧
-        "Ctrl" | "LeftCtrl" | "RightCtrl" => "\u{2303}",    // ⌃
-        "Alt" | "LeftAlt" | "RightAlt" => "\u{2387}",       // ⎇
-        "Enter" => "\u{23ce}",                              // ⏎
-        "Backspace" => "\u{232b}",                          // ⌫
-        "Space" => "\u{2423}",                              // ␣
-        "Del" | "Delete" => "\u{2326}",                     // ⌦
-        "PgUp" | "PageUp" => "\u{21de}",                    // ⇞
-        "PgDn" | "PageDown" => "\u{21df}",                  // ⇟
-        "Home" => "\u{21f1}",                               // ⇱
-        "End" => "\u{21f2}",                                // ⇲
-        "Up" => "\u{2191}",                                 // ↑
-        "Down" => "\u{2193}",                               // ↓
-        "Left" => "\u{2190}",                               // ←
-        "Right" => "\u{2192}",                              // →
-        "Menu" => "\u{2630}",                               // ☰
-        "Play/Pause" => "\u{25b6}",                         // ▶
-        "Eject" => "\u{23cf}",                              // ⏏
-        "Pause" => "\u{23f8}",                              // ⏸
-        "ScrollLock" => "\u{21f3}",                         // ⇳
+        "Esc" => return None,                         // no glyph, stays text
+        "Tab" => ("\u{21e5}", DV),                    // ⇥
+        "Caps Lock" | "CapsLock" => ("\u{21ea}", DV), // ⇪
+        "Shift" | "LeftShift" | "RightShift" => ("\u{21e7}", DV), // ⇧
+        "Ctrl" | "LeftCtrl" | "RightCtrl" => ("\u{2303}", DV), // ⌃
+        "Alt" | "LeftAlt" | "RightAlt" => ("\u{2387}", DV), // ⎇
+        "Win" | "GUI" | "LeftGUI" | "RightGUI" => return None, // drawn Tux
+        "Enter" => ("\u{23ce}", DV),                  // ⏎
+        "Backspace" => ("\u{232b}", DV),              // ⌫
+        "Space" => ("\u{2423}", DV),                  // ␣
+        "Ins" | "Insert" => return None,              // no glyph in these fonts
+        "Del" | "Delete" => ("\u{2326}", DV),         // ⌦
+        "PgUp" | "PageUp" => ("\u{21de}", DV),        // ⇞
+        "PgDn" | "PageDown" => ("\u{21df}", DV),      // ⇟
+        "Home" => ("\u{21f1}", DV),                   // ⇱
+        "End" => ("\u{21f2}", DV),                    // ⇲
+        "Up" => ("\u{2191}", DV),                     // ↑
+        "Down" => ("\u{2193}", DV),                   // ↓
+        "Left" => ("\u{2190}", DV),                   // ←
+        "Right" => ("\u{2192}", DV),                  // →
+        "Menu" => ("\u{2630}", DV),                   // ☰
+        "Pause" => ("\u{23f8}", NS),                  // ⏸ (not in DejaVu)
+        "ScrollLock" => ("\u{21f3}", DV),             // ⇳
+        "Eject" => ("\u{23cf}", DV),                  // ⏏
+        "Play/Pause" => ("\u{25b6}", DV),             // ▶
+        // The firmware's Fn functions.
+        "Lock Win Key" => ("\u{1f512}", NS), // 🔒
+        "Windows mode" => ("\u{229e}", DV),  // ⊞
+        "macOS mode" => ("\u{2318}", DV),    // ⌘
+        "Android mode" => return None,       // drawn
+        "iOS mode" => return None,           // drawn
         // Punctuation keeps its character, which is also what the cap shows.
-        "Minus" => "-",
-        "Equal" => "=",
-        "LeftBracket" => "[",
-        "RightBracket" => "]",
-        "Backslash" => "\\",
-        "NonUSHash" => "#",
-        "Semicolon" => ";",
-        "Quote" => "'",
-        "Grave" => "`",
-        "Comma" => ",",
-        "Dot" | "Period" => ".",
-        "Slash" => "/",
+        "Minus" => ("-", DV),
+        "Equal" => ("=", DV),
+        "LeftBracket" => ("[", DV),
+        "RightBracket" => ("]", DV),
+        "Backslash" => ("\\", DV),
+        "NonUSHash" => ("#", DV),
+        "Semicolon" => (";", DV),
+        "Quote" => ("'", DV),
+        "Grave" => ("`", DV),
+        "Comma" => (",", DV),
+        "Dot" | "Period" => (".", DV),
+        "Slash" => ("/", DV),
         _ => return None,
     })
 }
 
-/// The Meta key (`Win`/`GUI`/left/right) gets a drawn Tux instead of a glyph.
-pub fn is_meta(name: &str) -> bool {
-    matches!(name, "Win" | "GUI" | "LeftGUI" | "RightGUI" | "Meta")
+/// The symbol for a key legend, if there is a conventional one.
+pub fn of(name: &str) -> Option<&'static str> {
+    entry(name).map(|e| e.0)
 }
 
-/// The legend to draw: the symbol when there is one, else the name. Meta keys
-/// return an empty legend so a meta binding is not drawn on top of a meta cap.
+/// The drawn legend for a name, if it has one.
+pub fn icon(name: &str) -> Option<Icon> {
+    match name.trim() {
+        "Win" | "GUI" | "LeftGUI" | "RightGUI" | "Meta" => Some(Icon::Tux),
+        "Android mode" => Some(Icon::Android),
+        "iOS mode" => Some(Icon::Phone),
+        _ => None,
+    }
+}
+
+/// The legend to draw: the symbol when there is one, else the name. Drawn
+/// legends return an empty string, so a binding is not drawn on top of an
+/// identical cap.
 pub fn legend(name: &str) -> &str {
-    if is_meta(name) {
+    if icon(name).is_some() {
         ""
     } else {
         of(name).unwrap_or(name)
     }
 }
 
-/// The font to draw a legend in. iced's default font has the arrows but not
-/// the technical symbols (they came out as tofu), and it does not fall back to
-/// the system fonts, so symbol legends are drawn in DejaVu Sans, which has the
-/// whole set.
+/// The font to draw a legend in.
 pub fn font(name: &str) -> iced::Font {
-    if of(name).is_some() {
-        iced::Font {
-            family: iced::font::Family::Name("DejaVu Sans"),
-            ..iced::Font::DEFAULT
-        }
-    } else {
-        iced::Font::DEFAULT
+    let family = match entry(name) {
+        Some((_, family)) => family,
+        None => return iced::Font::DEFAULT,
+    };
+    iced::Font {
+        family: iced::font::Family::Name(family),
+        ..iced::Font::DEFAULT
     }
 }
 
@@ -82,17 +121,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn meta_is_drawn_not_glyphed() {
-        assert!(is_meta("Win"));
-        assert!(is_meta("LeftGUI"));
-        assert!(!is_meta("A"));
-        // A meta cap and a meta binding compare equal, so only one Tux shows.
+    fn meta_and_the_os_marks_are_drawn_not_glyphed() {
+        assert_eq!(icon("Win"), Some(Icon::Tux));
+        assert_eq!(icon("LeftGUI"), Some(Icon::Tux));
+        assert_eq!(icon("Android mode"), Some(Icon::Android));
+        assert_eq!(icon("iOS mode"), Some(Icon::Phone));
+        assert_eq!(icon("A"), None);
+        // A drawn cap and a drawn binding compare equal, so only one is drawn.
         assert_eq!(legend("Win"), legend("LeftGUI"));
+        assert_eq!(legend("Android mode"), "");
     }
 
     #[test]
-    fn names_without_a_glyph_in_the_font_stay_text() {
-        // DejaVu Sans has no ⎋ / ⎀ / ⎙, so these keep their text legend.
+    fn symbols_come_from_a_font_that_has_them() {
+        // ⏸ is not in DejaVu Sans; the small O key used to render a tofu box.
+        assert_eq!(entry("Pause"), Some(("\u{23f8}", NS)));
+        assert_eq!(entry("Lock Win Key"), Some(("\u{1f512}", NS)));
+        assert_eq!(entry("Backspace"), Some(("\u{232b}", DV)));
+        assert_eq!(entry("Windows mode"), Some(("\u{229e}", DV)));
+        assert_eq!(entry("macOS mode"), Some(("\u{2318}", DV)));
+    }
+
+    #[test]
+    fn names_without_a_glyph_in_the_fonts_stay_text() {
         assert_eq!(of("Esc"), None);
         assert_eq!(of("Insert"), None);
         assert_eq!(of("PrintScreen"), None);
