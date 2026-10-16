@@ -17,9 +17,13 @@ use gamakay_hidraw::{HidrawDevice, HidrawInfo};
 /// A request from the UI to the worker.
 pub enum Request {
     Connect,
-    Refresh,
     /// Make `profile` the active one (the keymap follows it).
     SetLayer(u8),
+    /// Re-read just one keymap layer. Switching layers only needs this: the
+    /// full connect path also reads the summary, the backlight and 50 macro
+    /// slots, and that burst is enough feature traffic to stall the board's
+    /// control endpoint (which then needs a replug).
+    ReadLayer(bool),
     SetBacklight(LedParam),
     SetBacklightOff(bool),
     SetSlot {
@@ -106,8 +110,8 @@ impl Worker {
                     self.device = None;
                     self.connect_and_read();
                 }
-                Request::Refresh => self.connect_and_read(),
                 Request::SetLayer(p) => self.set_layer(p),
+                Request::ReadLayer(fn_layer) => self.read_layer(fn_layer),
                 Request::SetBacklight(p) => self.set_backlight(&p),
                 Request::SetBacklightOff(off) => self.set_backlight_off(off),
                 Request::SetSlot {

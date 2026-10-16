@@ -215,7 +215,9 @@ impl App {
                 // with the other's red keys.
                 self.preview = None;
                 self.selected = None;
-                self.send(Request::Refresh);
+                // Only the layer is re-read: a full refresh would also pull the
+                // summary, the backlight and every macro slot.
+                self.send(Request::ReadLayer(fn_layer));
             }
             Message::SwitchLayer(profile) => {
                 self.profile = profile;
