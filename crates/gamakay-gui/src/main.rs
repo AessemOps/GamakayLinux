@@ -92,6 +92,9 @@ struct App {
     preview: Option<(u8, String)>,
     slot_edit: String,
     show_slots: bool,
+    /// Keymap layers the board exposes, and the active one.
+    layers: u8,
+    profile: u8,
     // Macro editor.
     macros: Vec<(u8, String)>,
     macro_slot: String,
@@ -113,8 +116,10 @@ enum Message {
     ApplyLight,
     LightOn,
     LightOff,
-    /// Switch the layer being edited.
-    Layer(bool),
+    /// Edit the Fn layer rather than the base keymap.
+    FnLayer(bool),
+    /// Make a keymap layer (onboard profile) active.
+    SwitchLayer(u8),
     SelectSlot(u8),
     /// Bind the selected slot to a value (from the picker or a captured key).
     AssignSlot(SlotValue),
@@ -161,6 +166,8 @@ impl App {
             preview: None,
             slot_edit: String::new(),
             show_slots: false,
+            layers: 1,
+            profile: 0,
             macros: Vec::new(),
             macro_slot: "0".into(),
             macro_steps: "A+@20, A-@20".into(),
@@ -187,9 +194,14 @@ impl App {
             Message::ApplyLight => self.apply_light(),
             Message::LightOn => self.send(Request::SetBacklightOff(false)),
             Message::LightOff => self.send(Request::SetBacklightOff(true)),
-            Message::Layer(fn_layer) => {
+            Message::FnLayer(fn_layer) => {
                 self.fn_layer = fn_layer;
                 self.send(Request::Refresh);
+            }
+            Message::SwitchLayer(profile) => {
+                self.profile = profile;
+                self.status = format!("switching to layer {}…", profile + 1);
+                self.send(Request::SetLayer(profile));
             }
             Message::AssignSlot(v) => self.assign_slot(v),
             Message::ToggleSlots => self.show_slots = !self.show_slots,
@@ -227,6 +239,8 @@ impl App {
         match event {
             Event::Connected(s) => {
                 self.connected = true;
+                self.layers = s.layers;
+                self.profile = s.profile;
                 self.status = format!("connected: {} ({})", s.model, s.usb);
                 self.summary = Some(s);
             }
@@ -606,13 +620,12 @@ impl App {
             Some(slot) => format!("Slot {slot} — press a key on the board, or pick one below"),
             None => "Click a key above to select it".to_string(),
         };
-        let layer_buttons: Vec<Element<Message>> = gamakay_core::keymap::LAYERS
-            .iter()
-            .map(|l| {
-                let active = l.fn_layer == self.fn_layer;
-                button(text(l.name).size(12))
-                    .on_press(Message::Layer(l.fn_layer))
-                    .width(Length::Fixed(64.0))
+        let layer_buttons: Vec<Element<Message>> = (0..self.layers.max(1))
+            .map(|i| {
+                let active = i == self.profile;
+                button(text(format!("{}", i + 1)).size(12))
+                    .on_press(Message::SwitchLayer(i))
+                    .width(Length::Fixed(30.0))
                     .style(if active {
                         button::primary
                     } else {
@@ -624,7 +637,13 @@ impl App {
         let board = column![
             row![
                 text("Layer").size(13),
-                row(layer_buttons).spacing(4),
+                row(layer_buttons).spacing(3),
+                row![
+                    text("Fn").size(12),
+                    toggler(self.fn_layer).on_toggle(Message::FnLayer),
+                ]
+                .spacing(6)
+                .align_y(iced::Alignment::Center),
                 horizontal_space(),
                 text(hint).size(13),
             ]

@@ -157,21 +157,16 @@ fn cmd_info(cli: &Cli) -> Result<()> {
     match record {
         Some(r) => {
             println!(
-                "model:       {} ({}) [{} family, {} profiles]",
+                "model:       {} ({}) [{} family]",
                 r.display_name,
                 r.name,
-                r.family.name(),
-                r.profiles
+                r.family.name()
             );
-            let names: Vec<&str> = gamakay_core::keymap::LAYERS
-                .iter()
-                .map(|l| l.name)
-                .collect();
             println!(
-                "layers:      {} (the {} family table lists up to {})",
-                names.join(" + "),
-                r.family.name(),
-                r.layer
+                "layers:      {} keymaps; the active one is selected with {:#04x}/{:#04x}",
+                r.layer,
+                gamakay_core::cmd::SET_PROFILE,
+                gamakay_core::cmd::GET_PROFILE
             );
         }
         None => println!("model:       unknown (no table record for id {id})"),

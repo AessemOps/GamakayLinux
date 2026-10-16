@@ -22,33 +22,16 @@ pub const BULK_PAGE_DATA: usize = 56;
 /// Bulk-write pages: eight data pages then the commit page.
 pub const BULK_PAGES: u8 = 9;
 
-/// A mappable keymap layer.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Layer {
-    /// Short name for the UI.
-    pub name: &'static str,
-    /// Whether this is the Fn layer (`0x90`/`0x10`) rather than base
-    /// (`0x89`/`0x09`).
-    pub fn_layer: bool,
-}
-
-/// The layers this project can read and write on the LK67.
-///
-/// The yc500 family table lists up to 8 layers, but this board exposes two
-/// mappable keymaps — base and Fn. The keymap read's leading byte does not
-/// select a layer (every value returns the same pages), and the reference has
-/// no layer-switch command. Discovering any further layers needs a capture of
-/// the vendor desktop app; see "Layers" in `docs/protocol.md`.
-pub const LAYERS: &[Layer] = &[
-    Layer {
-        name: "Base",
-        fn_layer: false,
-    },
-    Layer {
-        name: "Fn",
-        fn_layer: true,
-    },
-];
+// The keymap is **per profile**: `0x05` (`SET_PROFILE`) selects the active
+// profile and the keymap commands always address it, so a profile is what the
+// vendor UI calls a "layer". The yc500 device table's `layer` field is this
+// profile count — the LK67 has 8, each with its own keymap (identical clones
+// until edited).
+//
+// This board rejects the newer packet shape (`0x89 [profile, 0xFF, page,
+// subProfile]`, which the vendor app 3.0.27 sends) by echoing it back, so the
+// active profile is the only way to address a layer. See "Layers" in
+// `docs/protocol.md`.
 
 /// A slot's decoded value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

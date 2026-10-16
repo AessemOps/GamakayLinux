@@ -3,9 +3,9 @@
 //! command allow-list and the transport-agnostic conversation.
 //!
 //! Clean-room note: this crate is written from `docs/protocol.md`, which is
-//! our own notes. Wire facts were confirmed against hardware and against the
-//! GPL-3.0 `sharkfin` protocol document (see `CREDITS.md`). No vendor code
-//! is linked or bundled.
+//! our own notes. Wire facts were confirmed against this hardware and against
+//! GAMAKAY's own driver bundle (see `CREDITS.md`). No vendor code is linked or
+//! bundled.
 //!
 //! The transport is abstract so the same conversation is exercised against a
 //! real device (hidraw) and against recorded fixtures ([`MockTransport`]).

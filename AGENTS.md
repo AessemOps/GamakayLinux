@@ -108,7 +108,7 @@ gamakay keymap set --slot 20 --to macro:0   # bind macro 0 to a key
 - **Protocol rule**: `docs/protocol.md` is the allow-list source of truth. A
   change that adds or alters a command updates `docs/protocol.md`, the guard
   allow-list and a test **in the same change**. New wire facts get a marker:
-  **[HW]** (a plugged-in board), **[REF]** (derived from the GPL `sharkfin`
+  **[HW]** (a plugged-in board), **[REF]** (derived from GAMAKAY's driver
   document), or **[FW]** (a firmware image).
 - **Clean-room rule**: the vendor Electron bundle is extracted into the
   gitignored `vendor/` for study only and is **never** committed, bundled or

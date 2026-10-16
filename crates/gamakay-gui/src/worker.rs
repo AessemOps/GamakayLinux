@@ -18,6 +18,8 @@ use gamakay_hidraw::{HidrawDevice, HidrawInfo};
 pub enum Request {
     Connect,
     Refresh,
+    /// Make `profile` the active one (the keymap follows it).
+    SetLayer(u8),
     SetBacklight(LedParam),
     SetBacklightOff(bool),
     SetSlot {
@@ -43,6 +45,8 @@ pub struct Summary {
     pub model: String,
     pub firmware: Option<String>,
     pub profile: u8,
+    /// Keymap layers the board exposes (its profile count).
+    pub layers: u8,
 }
 
 /// An event from the worker to the UI.
@@ -98,6 +102,7 @@ impl Worker {
                     self.connect_and_read();
                 }
                 Request::Refresh => self.connect_and_read(),
+                Request::SetLayer(p) => self.set_layer(p),
                 Request::SetBacklight(p) => self.set_backlight(&p),
                 Request::SetBacklightOff(off) => self.set_backlight_off(off),
                 Request::SetSlot {
@@ -209,9 +214,11 @@ impl Worker {
             self.emit(Event::Disconnected);
             return;
         };
-        let model = gamakay_core::device::by_id(id)
+        let record = gamakay_core::device::by_id(id);
+        let model = record
             .map(|r| r.display_name.to_string())
             .unwrap_or_else(|| "unknown".to_string());
+        let layers = record.map(|r| r.layer).unwrap_or(1);
         let firmware = rev.filter(|r| *r != 0).map(|r| format!("{r:X}"));
         self.emit(Event::Connected(Summary {
             name,
@@ -221,6 +228,7 @@ impl Worker {
             model,
             firmware,
             profile,
+            layers,
         }));
     }
 
@@ -269,6 +277,18 @@ impl Worker {
                 if o.backlight_off { "off" } else { "on" }
             )));
         }
+    }
+
+    /// Select the active profile. The keymap commands address the active
+    /// profile, so this is how a different keymap layer is opened.
+    fn set_layer(&mut self, profile: u8) {
+        if self.with_session(|s| s.set_profile(profile)).is_none() {
+            return;
+        }
+        self.read_summary();
+        self.read_layer(false);
+        self.read_layer(true);
+        self.emit(Event::Status(format!("layer {} active", profile + 1)));
     }
 
     fn set_slot(&mut self, fn_layer: bool, slot: u8, value: SlotValue) {

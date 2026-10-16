@@ -103,6 +103,14 @@ impl Session<'_> {
         Ok(reply[1])
     }
 
+    /// `0x05`: make profile `p` the active one. Fire-and-forget; the board
+    /// commits it (the usual commit pause applies). Keymap reads and writes
+    /// address whichever profile is active, so this is also how a different
+    /// keymap layer is selected.
+    pub fn set_profile(&mut self, p: u8) -> Result<()> {
+        self.send(cmd::SET_PROFILE, &[p], Checksum::Bit7)
+    }
+
     /// `0x97`: auto-OS, `reply[1] == 1`.
     pub fn auto_os(&mut self) -> Result<bool> {
         let reply = self.roundtrip(cmd::GET_AUTO_OS, &[], Checksum::Bit7)?;

@@ -1,10 +1,11 @@
 # LK67 protocol notes
 
-Our own working notes for the GamaKay LK67. Every wire fact here is either
-read off this board in Phase 0 (marker **[HW]**) or taken from the GPL-3.0
-`sharkfin` protocol document and cross-checked against the LK67's descriptors
-(marker **[REF]**). Nothing is copied from the vendor's JavaScript bundle; the
-bundle stays in a gitignored `vendor/` and is only read to confirm a layout.
+Our own working notes for the GamaKay LK67. Every wire fact here was either
+read off this board (marker **[HW]**) or taken from GAMAKAY's own driver —
+opcode tables and packet builders extracted from
+`GAMAKAY_v4_setup_3.0.27_WIN20250820.exe` (marker **[REF]**). The installer
+stays outside the repo; it is only read to confirm a wire fact. **sharkfin is
+no longer a reference: it does not support the LK67.**
 
 This file is the source of truth for the command allow-list in
 `gamakay-core::guard`. A command that is not here is not sendable.
@@ -323,27 +324,38 @@ protocol is unchanged and shows the exact packets:
 - It sends one `0xFD` with a zero payload before the rest (purpose unknown;
   not required — our reads and writes work without it).
 
-## Layers
+## Layers (keymaps)
 
-The yc500 family table lists up to 8 layers and the LK67's record carries
-`layer: 8`, but **this board exposes two mappable keymaps: base (`0x89`/`0x09`)
-and Fn (`0x90`/`0x10`)**. Measured on the 2026-10 firmware:
+The LK67 keeps **8 keymaps**, one per *profile*; the yc500 device table's
+`layer` field is that count. A keymap is addressed by **making its profile
+active**:
 
-- The keymap read's leading byte does **not** select a layer: `0x89 [n, page]`
-  returns identical pages for every `n` in `0..=7`.
-- The Fn read answers for `n` in `0..=3` (0 and 1 identical, 2 and 3 all-zero)
-  and **errors for `n >= 4`, which stalls the settings endpoint** — do not probe
-  it blindly (it needed a replug).
-- The reference has no layer/profile-switch command, and the captured vendor web
-  driver only ever touches base + Fn, so there is no packet to copy.
+- `0x05` (`SET_PROFILE`) selects the active profile, `0x85` (`GET_PROFILE`)
+  returns it in `reply[1]`. Fire-and-forget, like every SET.
+- The keymap commands always address the **active** profile — the profile byte
+  in their payload is ignored. Verified: with profile 1 active, writing slot 14
+  to `Esc` changed profile 1 only; switching back to profile 0 still read `W`.
+  Profile 0 is the factory value of every other profile until one is edited, so
+  reading all eight looks identical out of the box.
+- The GUI addresses layers this way: the Keymap tab's Layer selector switches
+  the active profile and the reads/writes follow it.
 
-Further layers would need a capture of the vendor *desktop* app while it
-switches layers. Until then `gamakay_core::keymap::LAYERS` lists Base and Fn,
-and the GUI's Keymap tab has a selector over exactly that list.
+### The newer packet shape is not supported
+
+Vendor app 3.0.27 builds the keymap commands with a different header — read
+`0x89 [profile, 0xFF, page, subProfile]`, write `0x09 [profile, 0xFF, page,
+len, last, subProfile, <56 bytes at byte 8>]` — addressing a profile *and* one
+of four "sub-profiles" directly. **This board echoes that request back instead
+of answering it**, so the shape is unrecognised here (its firmware speaks the
+older two-byte form). Its own Fn read is `0x90`, which this board does answer.
+
+Checksum, both families: byte 7 = `255 - (sum(bytes 0..=6) & 0xFF)` for the
+Bit7 form; byte 8 likewise for Bit8.
 
 ## Provenance
 
-- `sharkfin` (GPL-3.0-or-later, © JR Lanteigne) — the ROYUAN/`yc500` protocol
-  document this file's **[REF]** rows are derived from, and a structural
-  reference for the transport/guard split. See `CREDITS.md`.
+- GAMAKAY's own driver, app 3.0.27 — its opcode table (`FEA_CMD_*`) and its
+  packet builders are the source of the **[REF]** rows, and its device table of
+  the `layer` field. Extracted from the NSIS installer's `resources/app`
+  (an Electron bundle) and `iot_driver.exe`; nothing is copied from it.
 - LK67 USB and HID descriptors — read from this machine in Phase 0.
