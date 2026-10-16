@@ -277,6 +277,7 @@ impl App {
         let desc = Slot::from_value(value).describe();
         self.preview = Some((slot, desc.clone()));
         self.slot_edit = desc;
+        self.status = "writing…".into();
         self.send(Request::SetSlot {
             fn_layer: self.fn_layer,
             slot,

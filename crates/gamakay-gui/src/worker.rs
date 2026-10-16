@@ -198,21 +198,21 @@ impl Worker {
         let name = info.name.clone();
         let usb = format!("{:04x}:{:04x}", info.vendor_id, info.product_id);
         let link = info.connection.label().to_string();
-        let (id, firmware, profile, model) = match self.with_session(|s| {
+        // A board that does not answer is *not* connected: never report a bogus
+        // "unknown" model, which is what a failed identify used to look like.
+        let Some((id, rev, profile)) = self.with_session(|s| {
             let id = s.device_id()?;
             let rev = s.revision().ok();
             let profile = s.profile().unwrap_or(0);
             Ok((id, rev, profile))
-        }) {
-            Some((id, rev, profile)) => {
-                let model = gamakay_core::device::by_id(id)
-                    .map(|r| r.display_name.to_string())
-                    .unwrap_or_else(|| "unknown".to_string());
-                let fw = rev.filter(|r| *r != 0).map(|r| format!("{r:X}"));
-                (id, fw, profile, model)
-            }
-            None => (0, None, 0, "unknown".to_string()),
+        }) else {
+            self.emit(Event::Disconnected);
+            return;
         };
+        let model = gamakay_core::device::by_id(id)
+            .map(|r| r.display_name.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        let firmware = rev.filter(|r| *r != 0).map(|r| format!("{r:X}"));
         self.emit(Event::Connected(Summary {
             name,
             usb,
@@ -272,16 +272,17 @@ impl Worker {
     }
 
     fn set_slot(&mut self, fn_layer: bool, slot: u8, value: SlotValue) {
-        // A transport failure usually means the node moved under us: the handle
-        // is dropped, so re-enumerate and try once more rather than making the
-        // user click again.
+        // No read-back: a feature transfer that lands in the board's flash
+        // commit window stalls the settings endpoint until it is re-enumerated
+        // (see "Writes (SET)" in docs/protocol.md). The write is applied either
+        // way, so the UI is updated from the copy we just sent.
         for attempt in 0..2 {
             let profile = self.with_session(|s| s.profile()).unwrap_or(0);
             let result = self.with_session(|s| {
                 let mut km = s.read_layer(profile, fn_layer)?;
                 km.set(slot as usize, Slot::from_value(value));
                 s.write_layer(profile, &km, fn_layer)?;
-                s.read_layer(profile, fn_layer)
+                Ok(km)
             });
             match result {
                 Some(km) => {
