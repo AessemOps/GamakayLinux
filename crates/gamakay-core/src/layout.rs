@@ -73,7 +73,7 @@ pub const LK67_LAYOUT: &[LayoutKey] = &[
     LayoutKey::k("P", 62, 10.5, 1.0, 1.0),
     LayoutKey::k("^", 68, 11.5, 1.0, 1.0),
     LayoutKey::k("$", 74, 12.5, 1.0, 1.0),
-    LayoutKey::k("*", 80, 13.5, 1.0, 1.0),
+    LayoutKey::k("*", 80, 13.5, 1.0, 1.5),
     LayoutKey::k("Ins", 86, 15.4, 1.0, 1.0),
     // Row 2 — AZERTY home row.
     LayoutKey::k("Caps Lock", 3, 0.0, 2.0, 1.75),
