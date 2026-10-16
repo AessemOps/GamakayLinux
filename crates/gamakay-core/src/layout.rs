@@ -71,7 +71,7 @@ pub const LK67_LAYOUT: &[LayoutKey] = &[
     LayoutKey::k("[", 68, 11.5, 1.0, 1.0),
     LayoutKey::k("]", 74, 12.5, 1.0, 1.0),
     LayoutKey::k("\\", 80, 13.5, 1.0, 1.5),
-    LayoutKey::k("Del", 86, 16.0, 1.0, 1.0),
+    LayoutKey::k("PgUp", 86, 16.0, 1.0, 1.0),
     // Row 2.
     LayoutKey::k("Caps Lock", 3, 0.0, 2.0, 1.75),
     LayoutKey::k("A", 9, 1.75, 2.0, 1.0),
@@ -86,7 +86,7 @@ pub const LK67_LAYOUT: &[LayoutKey] = &[
     LayoutKey::k(";", 63, 10.75, 2.0, 1.0),
     LayoutKey::k("'", 69, 11.75, 2.0, 1.0),
     LayoutKey::k("Enter", 81, 12.75, 2.0, 2.25),
-    LayoutKey::k("Ins", 85, 16.0, 2.0, 1.0),
+    LayoutKey::k("Del", 85, 16.0, 2.0, 1.0),
     // Row 3.
     LayoutKey::k("Shift", 4, 0.0, 3.0, 2.25),
     LayoutKey::k("Z", 16, 2.25, 3.0, 1.0),
