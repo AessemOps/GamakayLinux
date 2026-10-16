@@ -6,6 +6,7 @@ use std::sync::mpsc::Receiver;
 
 use iced::futures::channel::mpsc::UnboundedSender;
 
+use gamakay_core::error::Error as CoreError;
 use gamakay_core::guard::Guard;
 use gamakay_core::keymap::{Keymap, Slot, SlotValue};
 use gamakay_core::light::{LK67_FLAGS, LedParam, LedState, Mode};
@@ -90,7 +91,13 @@ impl Worker {
     fn run(mut self, rx: Receiver<Request>) {
         while let Ok(req) = rx.recv() {
             match req {
-                Request::Connect | Request::Refresh => self.connect_and_read(),
+                Request::Connect => {
+                    // Reconnect must actually re-enumerate: the node name
+                    // changes across replugs, so a cached handle can be stale.
+                    self.device = None;
+                    self.connect_and_read();
+                }
+                Request::Refresh => self.connect_and_read(),
                 Request::SetBacklight(p) => self.set_backlight(&p),
                 Request::SetBacklightOff(off) => self.set_backlight_off(off),
                 Request::SetSlot {
@@ -110,21 +117,8 @@ impl Worker {
 
     /// Open the board if needed, then read the summary and current state.
     fn connect_and_read(&mut self) {
-        if self.device.is_none() {
-            match gamakay_hidraw::find_supported() {
-                Some(info) => match HidrawDevice::open(&info.path) {
-                    Ok(dev) => self.device = Some((dev, info)),
-                    Err(e) => {
-                        self.emit(Event::Error(format!("open: {e}")));
-                        self.emit(Event::Disconnected);
-                        return;
-                    }
-                },
-                None => {
-                    self.emit(Event::Disconnected);
-                    return;
-                }
-            }
+        if !self.ensure_device() {
+            return;
         }
         self.read_summary();
         self.read_backlight();
@@ -133,15 +127,64 @@ impl Worker {
         self.read_macros();
     }
 
+    /// Make sure the board is open, re-enumerating when the cached node has
+    /// gone. Unplugging and replugging renumbers `/dev/hidrawN`, and a number
+    /// freed by another device gets reused, so a cached handle can point at a
+    /// device that no longer exists while its path looks fine — every access
+    /// then fails with ioctl `ENODEV` and reusing the fd never recovers.
+    fn ensure_device(&mut self) -> bool {
+        let gone = match &self.device {
+            Some((_, info)) => node_missing(&info.path),
+            None => true,
+        };
+        if !gone {
+            return true;
+        }
+        if self.device.take().is_some() {
+            self.emit(Event::Disconnected);
+        }
+        let Some(info) = gamakay_hidraw::find_supported() else {
+            self.emit(Event::Disconnected);
+            return false;
+        };
+        match HidrawDevice::open(&info.path) {
+            Ok(dev) => {
+                self.device = Some((dev, info));
+                // Announce it so the sidebar stops showing the old error.
+                self.read_summary();
+                true
+            }
+            Err(e) => {
+                self.emit(Event::Error(format!("open: {e}")));
+                self.emit(Event::Disconnected);
+                false
+            }
+        }
+    }
+
     fn with_session<T>(
         &mut self,
         f: impl FnOnce(&mut Session) -> gamakay_core::Result<T>,
     ) -> Option<T> {
-        let (dev, _) = self.device.as_mut()?;
-        let mut s = Session::new(dev, Guard::new(false));
-        match f(&mut s) {
+        if !self.ensure_device() {
+            return None;
+        }
+        let outcome = match self.device.as_mut() {
+            Some((dev, _)) => {
+                let mut s = Session::new(dev, Guard::new(false));
+                f(&mut s)
+            }
+            None => return None,
+        };
+        match outcome {
             Ok(v) => Some(v),
             Err(e) => {
+                // A device that has gone away never recovers in place: drop the
+                // handle so the next request re-enumerates.
+                if matches!(e, CoreError::Transport(_) | CoreError::DeviceNotFound) {
+                    self.device = None;
+                    self.emit(Event::Disconnected);
+                }
                 self.emit(Event::Error(e.to_string()));
                 None
             }
@@ -229,19 +272,29 @@ impl Worker {
     }
 
     fn set_slot(&mut self, fn_layer: bool, slot: u8, value: SlotValue) {
-        let profile = self.with_session(|s| s.profile()).unwrap_or(0);
-        let result = self.with_session(|s| {
-            let mut km = s.read_layer(profile, fn_layer)?;
-            km.set(slot as usize, Slot::from_value(value));
-            s.write_layer(profile, &km, fn_layer)?;
-            s.read_layer(profile, fn_layer)
-        });
-        if let Some(km) = result {
-            self.emit(Event::Layer {
-                fn_layer,
-                slots: layer_slots(&km),
+        // A transport failure usually means the node moved under us: the handle
+        // is dropped, so re-enumerate and try once more rather than making the
+        // user click again.
+        for attempt in 0..2 {
+            let profile = self.with_session(|s| s.profile()).unwrap_or(0);
+            let result = self.with_session(|s| {
+                let mut km = s.read_layer(profile, fn_layer)?;
+                km.set(slot as usize, Slot::from_value(value));
+                s.write_layer(profile, &km, fn_layer)?;
+                s.read_layer(profile, fn_layer)
             });
-            self.emit(Event::Status(format!("slot {slot} updated")));
+            match result {
+                Some(km) => {
+                    self.emit(Event::Layer {
+                        fn_layer,
+                        slots: layer_slots(&km),
+                    });
+                    self.emit(Event::Status(format!("slot {slot} updated")));
+                    return;
+                }
+                None if attempt == 0 && self.device.is_none() => continue,
+                None => return,
+            }
         }
     }
 
@@ -280,7 +333,26 @@ fn layer_slots(km: &Keymap) -> Vec<(u8, String)> {
         .collect()
 }
 
+/// Whether a cached hidraw path has gone. Replugging renumbers `/dev/hidrawN`,
+/// so a remembered path can stop existing (or be reused by another device).
+fn node_missing(path: &std::path::Path) -> bool {
+    !path.exists()
+}
+
 /// The mode names for the lighting picker.
 pub fn mode_names() -> Vec<String> {
     Mode::ALL.iter().map(|m| m.name().to_string()).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_vanished_node_is_detected() {
+        assert!(node_missing(std::path::Path::new(
+            "/dev/hidraw-does-not-exist"
+        )));
+        assert!(!node_missing(std::path::Path::new("/dev/null")));
+    }
 }
