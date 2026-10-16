@@ -27,8 +27,14 @@ impl ColorWheel {
         (bounds.width.min(bounds.height) / 2.0 - MARGIN).max(1.0)
     }
 
+    /// The wheel's centre in canvas-local coordinates (the widget's origin is
+    /// `(0, 0)` inside the frame, while `bounds` is absolute).
+    fn center(bounds: Rectangle) -> Point {
+        Point::new(bounds.width / 2.0, bounds.height / 2.0)
+    }
+
     fn point(&self, bounds: Rectangle, hue: f32, sat: f32) -> Point {
-        let c = bounds.center();
+        let c = Self::center(bounds);
         let r = Self::radius(bounds) * sat;
         let a = hue.to_radians();
         Point::new(c.x + r * a.cos(), c.y + r * a.sin())
@@ -36,7 +42,7 @@ impl ColorWheel {
 
     /// Hue/saturation under a canvas-local position.
     fn hit(&self, pos: Point, bounds: Rectangle) -> (f32, f32) {
-        let c = bounds.center();
+        let c = Self::center(bounds);
         let dx = pos.x - c.x;
         let dy = pos.y - c.y;
         let hue = dy.atan2(dx).to_degrees().rem_euclid(360.0);
@@ -148,6 +154,31 @@ impl Program<Message> for ColorWheel {
             mouse::Interaction::Crosshair
         } else {
             mouse::Interaction::default()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use iced::Size;
+
+    /// A canvas placed away from the origin: `bounds` is absolute while the
+    /// cursor position is local, so `point` and `hit` must both work in the
+    /// widget's own frame.
+    #[test]
+    fn hit_inverts_point_inside_the_widget() {
+        let bounds = Rectangle::new(Point::new(630.0, 560.0), Size::new(150.0, 150.0));
+        let w = ColorWheel::new(0.0, 0.0);
+        for &(h, s) in &[(0.0f32, 1.0f32), (90.0, 0.5), (200.0, 0.8), (330.0, 0.3)] {
+            let p = w.point(bounds, h, s);
+            assert!(
+                (0.0..=150.0).contains(&p.x) && (0.0..=150.0).contains(&p.y),
+                "marker {p:?} falls outside the widget for hue {h}, sat {s}"
+            );
+            let (h2, s2) = w.hit(p, bounds);
+            assert!((h - h2).abs() < 1.0, "hue {h} -> {h2}");
+            assert!((s - s2).abs() < 0.02, "sat {s} -> {s2}");
         }
     }
 }
