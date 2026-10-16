@@ -359,6 +359,8 @@ fn layer_slots(km: &Keymap) -> Vec<(u8, String)> {
         .enumerate()
         .filter(|(_, s)| **s != Slot::EMPTY)
         .map(|(i, s)| (i as u8, s.describe()))
+        // An entry with no name (the Fn layer's `Special(8)`) is not listed.
+        .filter(|(_, d)| !d.is_empty())
         .collect()
 }
 

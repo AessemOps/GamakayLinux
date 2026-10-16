@@ -169,8 +169,10 @@ impl Slot {
                 3 => "Lock Win Key".to_string(),
                 12 => "Backlight on/off".to_string(),
                 17 => "Caps LED".to_string(),
-                // 8 sits on Space in the Fn layer and is not in any vendor
-                // table; unnamed until it is identified.
+                // 8 sits on Space in the Fn layer and is named nowhere — not in
+                // the vendor app, and its driver does not label it either. Show
+                // nothing rather than a placeholder.
+                8 => String::new(),
                 _ => format!("Fn function {s}"),
             },
             SlotValue::Unknown(r) => {

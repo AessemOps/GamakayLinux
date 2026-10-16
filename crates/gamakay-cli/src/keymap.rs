@@ -85,10 +85,13 @@ fn get(cli: &Cli, args: &GetArgs) -> Result<()> {
     println!("profile {profile}, {which} layer:");
     let mut shown = 0;
     for (i, slot) in layer.slots.iter().enumerate() {
-        if *slot == Slot::EMPTY && !args.all {
+        let desc = slot.describe();
+        // Skip empty slots, and entries with no name (the Fn layer's
+        // `Special(8)`), unless the caller asked for everything.
+        if (*slot == Slot::EMPTY || desc.is_empty()) && !args.all {
             continue;
         }
-        println!("  slot {i:>3}  {}", slot.describe());
+        println!("  slot {i:>3}  {desc}");
         shown += 1;
     }
     if shown == 0 {
