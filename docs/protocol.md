@@ -245,11 +245,16 @@ committed fixtures are the real captures.
   sits under the `A` cap, slot 14 is `W` under `Z`, and so on, so the printed
   legends differ from the keymap names. The GUI preview draws the printed
   legends (the board as it looks), not the keymap names.
-- **Right column caps read `Ins` / `Del` / `PgDn`** while slots 85 / 86 / 87
-  are `Delete` / `PageUp` / `PageDown`; there is no `Insert` in the keymap at
-  all (`Ins` is Fn+J). The knob is programmable through slots 23 (Vol−), 29
-  (Vol+) and 75 (Play/Pause). The physical positions come from a photo of the
-  board (`crates/gamakay-core/src/layout.rs`).
+- **Right column wiring, top to bottom: `Ins` -> slot 85, `Del` -> slot 86,
+  `PgDn` -> slot 87.** The `Ins` cap is *not* slot 86. The factory layer puts
+  `Delete` on 85, `PageUp` on 86 and `PageDown` on 87 — so out of the box the
+  `Ins` cap sends Delete and the `Del` cap sends PageUp. Binding 85 to `Insert`
+  and 86 to `Delete` makes the caps match what they do. **Verified by pressing
+  the caps:** the earlier mapping (Ins -> 86) drew a correct-looking preview but
+  wrote the wrong slot, so remapping Ins/Del appeared to do nothing.
+  There is no `Insert` in the factory keymap at all (`Ins` is Fn+J). The knob is
+  programmable through slots 23 (Vol−), 29 (Vol+) and 75 (Play/Pause). Positions
+  come from a photo of the board (`crates/gamakay-core/src/layout.rs`).
 - **Single-slot write `0x13` is ignored** on this unit: the write is accepted
   but the slot does not change on read-back. Same for the Fn single write.
 - **Bulk layer write `0x09` works:** `[profile, 0xF8, 1, page]` + 56 bytes at
