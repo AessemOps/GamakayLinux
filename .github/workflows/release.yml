@@ -14,6 +14,19 @@ name: release
 on:
   push:
     tags: ['v*']
+  # Also on pull requests that touch packaging, so the pipeline is proven before
+  # a tag exists: publishing stays gated on the tag below. `workflow_dispatch`
+  # alone could not do this, since GitHub only offers it for workflows that are
+  # already on the default branch.
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'Makefile'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'crates/**'
+      - 'packaging/**'
+      - 'scripts/**'
   workflow_dispatch:
 
 env:
