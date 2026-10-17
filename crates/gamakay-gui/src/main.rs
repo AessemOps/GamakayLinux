@@ -49,7 +49,20 @@ fn main() -> iced::Result {
         // Monochrome Noto Emoji, bundled: it is the only font here with the
         // emoji the previews use (⏸ 🔒 🍎 🤖). See CREDITS.md.
         .font(include_bytes!("../assets/NotoEmoji.ttf").as_slice())
-        .window_size(iced::Size::new(1280.0, 820.0))
+        .window(iced::window::Settings {
+            size: iced::Size::new(1280.0, 820.0),
+            // The shell associates a *window* with its .desktop entry by this
+            // id (winit's WM_CLASS on X11, the app id on Wayland). Left unset —
+            // as it was — the window advertises an empty WM_CLASS, so the
+            // running app gets a generic taskbar icon and does not group under
+            // its launcher entry, however well the package installs the icons.
+            // The value matches the .desktop file's basename (`gamakay`).
+            platform_specific: iced::window::settings::PlatformSpecific {
+                application_id: "gamakay".to_owned(),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
         .run()
 }
 
