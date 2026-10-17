@@ -98,6 +98,29 @@ pub const LK67: DeviceRecord = DeviceRecord {
 /// these too, so a pre-update board is still recognised.
 pub const LK67_LEGACY_USB: &[(u16, u16)] = &[(0x0461, 0x4002)];
 
+/// The LK67's 2.4 GHz receiver ("Areson Technology Corp / RONGYUAN 2.4G Wireless
+/// Device", three HID interfaces). It is the board's own dongle, but it is **not**
+/// a second keyboard to drive: no interface of it declares a feature report, so
+/// the yc500 feature protocol cannot be addressed over it. It is listed here so
+/// it can be recognised and named instead of being mistaken for an unknown USB
+/// device — and so the identity gate knows it is ours rather than a stranger's.
+pub const LK67_RECEIVER_USB: &[(u16, u16)] = &[(0x25a7, 0xfa17)];
+
+/// True when these USB ids are the LK67's 2.4 GHz receiver.
+pub fn is_lk67_receiver(vendor_id: u16, product_id: u16) -> bool {
+    LK67_RECEIVER_USB.contains(&(vendor_id, product_id))
+}
+
+/// Whether a node identified by these ids is a GamaKay board or its receiver,
+/// as opposed to some other HID device that merely looks similar. Bluetooth
+/// cannot be matched by USB id (HOGP surfaces under the adapter's ids, with the
+/// board's own HID name), so it is accepted on the connection instead.
+pub fn is_gamakay(vendor_id: u16, product_id: u16, bluetooth: bool) -> bool {
+    bluetooth
+        || is_lk67_receiver(vendor_id, product_id)
+        || !by_usb(vendor_id, product_id).is_empty()
+}
+
 /// A known sibling that shares the LK67's USB ids but is a different board.
 /// Present so a mis-identified handshake is caught rather than assumed.
 pub const YZ68: DeviceRecord = DeviceRecord {
@@ -174,5 +197,27 @@ mod tests {
         // The pre-update id still resolves to the LK67 (and, in decimal, is
         // also the YZ68's id).
         assert!(by_usb(0x0461, 0x4002).iter().any(|d| d.id == LK67.id));
+    }
+
+    /// The gate that stops a front-end writing to whatever HID device happened
+    /// to be found: ours pass, a stranger's HID device — the Corsair mouse on
+    /// this machine, which also carries a 64-byte feature report — does not.
+    #[test]
+    fn only_ours_is_a_gamakay_device() {
+        assert!(is_gamakay(0x3151, 0x4003, false)); // wired, current firmware
+        assert!(is_gamakay(0x0461, 0x4002, false)); // wired, pre-update
+        assert!(is_gamakay(0x25a7, 0xfa17, false)); // the 2.4 GHz receiver
+        assert!(is_gamakay(0x1b1c, 0x1b2e, true)); // Bluetooth: any ids
+        assert!(!is_gamakay(0x1b1c, 0x1b2e, false)); // Corsair mouse, USB
+        assert!(!is_gamakay(0x1234, 0x5678, false)); // anything else
+    }
+
+    #[test]
+    fn the_receiver_is_recognised_and_is_not_a_board_record() {
+        assert!(is_lk67_receiver(0x25a7, 0xfa17));
+        assert!(!is_lk67_receiver(0x3151, 0x4003));
+        // It must not become a candidate board record: it has no settings
+        // channel, so it must never be selected as one.
+        assert!(by_usb(0x25a7, 0xfa17).is_empty());
     }
 }

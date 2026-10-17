@@ -30,6 +30,19 @@ impl HidrawInfo {
     pub fn has_settings_report(&self) -> bool {
         self.feature_bytes >= 64
     }
+
+    /// Whether this node belongs to a GamaKay board (or its receiver) rather
+    /// than to some other HID device that merely looks similar. Front-ends must
+    /// not write to anything this rejects: on this machine the Corsair mouse
+    /// also carries a 64-byte feature report, so "has a settings report" alone
+    /// picks the wrong device the moment the keyboard is away.
+    pub fn is_gamakay(&self) -> bool {
+        gamakay_core::device::is_gamakay(
+            self.vendor_id,
+            self.product_id,
+            self.connection == Connection::Bluetooth,
+        )
+    }
 }
 
 /// Map a Linux input bus id to a connection label.
@@ -91,13 +104,20 @@ fn read_node(class_link: &Path) -> Option<HidrawInfo> {
     let name = parse_hid_name(&uevent).unwrap_or_default();
     let desc = fs::read(device.join("report_descriptor")).unwrap_or_default();
     let summary = parse_descriptor(&desc);
+    // The receiver is a USB device like any other, so the bus cannot tell it
+    // apart: its ids do.
+    let connection = if gamakay_core::device::is_lk67_receiver(vendor_id, product_id) {
+        Connection::Receiver
+    } else {
+        connection_of(bus)
+    };
     Some(HidrawInfo {
         path: PathBuf::from("/dev").join(class_link.file_name()?),
         name,
         vendor_id,
         product_id,
         bus,
-        connection: connection_of(bus),
+        connection,
         feature_bytes: summary.feature_bytes,
         usage_page: summary.app_usage_page,
         usage: summary.app_usage,

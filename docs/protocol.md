@@ -37,10 +37,16 @@ HOGP (surfaced through `uhid`).
 So the settings node is picked by "carries a ≥64-byte feature report",
 preferring a known USB id. `gamakay list` shows which node that is.
 
-The 2.4 GHz dongle VID/PID and the Bluetooth HID descriptor are **open
-items** (Phase 0, not yet captured). Until they are known, selection falls
-back to "carries the settings report"; do not assume a dongle relays every
-command.
+The 2.4 GHz receiver is **`25a7:fa17`** ("Areson Technology Corp / RONGYUAN 2.4G
+Wireless Device"), three HID interfaces: a mouse collection, a vendor collection
+(`0xFF00:0x0E`) whose only writable channel is **Report ID `0xBA`, an output and
+an input report of 31 bytes each**, and a boot keyboard. **No interface of it
+declares a feature report**, so the protocol above cannot be addressed over it:
+a 64-byte feature report is what every selection path looks for, and 64 bytes do
+not fit the 31-byte channel either. The Bluetooth HID descriptor is still an open
+item. Selection therefore falls back to "carries the settings report" — which on
+a machine with other HID hardware picks the wrong device, so front-ends gate on
+the device's identity (`gamakay_core::device::is_gamakay`) before writing.
 
 ## Checksums
 
@@ -179,18 +185,24 @@ procedure:
 
 ## Transport support matrix
 
-Filled in as transports are captured. Cable is the only verified column so
-far; the others are open Phase 0 items and unsupported features must be
-disabled rather than guessed.
+Cable is the only verified column. The 2.4 GHz column is what the receiver's own
+descriptors show: it offers no feature report, so the feature-report protocol
+below is not addressable over it — see "The LK67 on USB" for the detail. The
+Bluetooth column is still open. Unsupported features are disabled rather than
+guessed.
 
-| feature | USB cable | 2.4 GHz | Bluetooth |
+| feature | USB cable | 2.4 GHz (\*) | Bluetooth |
 |---|---|---|---|
-| identify / revision | yes **[HW]** | ? | ? |
-| info / options / debounce | yes **[HW]** | ? | ? |
-| lighting | yes **[HW]** | ? | ? |
-| keymap (base + Fn) | yes **[HW]** | ? | ? |
-| macros | yes **[HW]** | ? | ? |
-| battery | — (no command; receiver status only) | ? | ? |
+| settings channel | 64-byte feature report, report id 0 | none declared; only the 31-byte `0xBA` input/output pair | ? |
+| identify / revision | yes **[HW]** | no channel | ? |
+| info / options / debounce | yes **[HW]** | no channel | ? |
+| lighting | yes **[HW]** | no channel | ? |
+| keymap (base + Fn) | yes **[HW]** | no channel | ? |
+| macros | yes **[HW]** | no channel | ? |
+| battery | — (no command; receiver status only) | receiver's own status channel (GAMAKAY models it as a protobuf `dangleDev` with `isOnline`/`battery`), not yet framed here | ? |
+
+(\*) `25a7:fa17`. Whether its descriptor changes once the keyboard is paired is
+untested; if it does, this row is what to re-read.
 
 ## Phase 1 hardware findings (LK67, USB cable)
 

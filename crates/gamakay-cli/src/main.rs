@@ -16,7 +16,6 @@ use clap::{Parser, Subcommand};
 
 use gamakay_core::device;
 use gamakay_core::guard::Guard;
-use gamakay_core::model::Connection;
 use gamakay_core::transport::Session;
 use gamakay_hidraw::{HidrawDevice, HidrawInfo};
 
@@ -226,16 +225,22 @@ fn cmd_info(cli: &Cli) -> Result<()> {
 
 /// The node to talk to: `--device`, else the auto-detected settings node.
 pub(crate) fn select_device(cli: &Cli) -> Result<HidrawInfo> {
-    if let Some(path) = &cli.device {
-        return gamakay_hidraw::find(path)
-            .with_context(|| format!("no hidraw node at {}", path.display()));
-    }
-    let found = gamakay_hidraw::find_supported()
-        .ok_or_else(|| anyhow::anyhow!("no GamaKay keyboard found"))?;
-    if found.connection == Connection::Unknown && !cli.force {
+    let found = match &cli.device {
+        Some(path) => gamakay_hidraw::find(path)
+            .with_context(|| format!("no hidraw node at {}", path.display()))?,
+        None => gamakay_hidraw::find_supported()
+            .ok_or_else(|| anyhow::anyhow!("no GamaKay keyboard found"))?,
+    };
+    // "Carries a 64-byte feature report" alone picks the wrong device: on this
+    // machine the Corsair mouse has one too, so a node whose ids (or Bluetooth
+    // connection) are not ours must be refused unless the user insists.
+    if !found.is_gamakay() && !cli.force {
         bail!(
-            "the node {} is not a recognised USB/Bluetooth GamaKay device; pass --force to try it",
-            found.path.display()
+            "the node {} ({:04x}:{:04x}, {}) is not a recognised GamaKay device; pass --force to try it",
+            found.path.display(),
+            found.vendor_id,
+            found.product_id,
+            found.connection.label()
         );
     }
     if found.usage != 0 || found.feature_bytes > 0 {

@@ -15,6 +15,9 @@ SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0461", ATTRS{idProduct}=="4002", TAG+="ua
 # the HID name instead. Wired and Bluetooth share the same product name.
 SUBSYSTEM=="hidraw", ATTRS{name}=="*GamaKay LK67 Keyboard*", TAG+="uaccess"
 
-# The 2.4 GHz receiver's VID/PID for the LK67 is not yet recorded (Phase 0
-# open item). Once known, add an idVendor/idProduct pair here; until then the
-# name match above covers a receiver that reports the product name.
+# The 2.4 GHz receiver ("Areson Technology Corp / RONGYUAN 2.4G Wireless
+# Device"). It reports its own product name, so the name match below does not
+# catch it. No node of it declares a feature report, so it carries no settings
+# channel; it is granted access so the receiver can be opened and named, not to
+# be written to.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="25a7", ATTRS{idProduct}=="fa17", TAG+="uaccess"

@@ -171,16 +171,17 @@ impl Worker {
             self.emit(Event::Disconnected);
             return false;
         };
-        // Never write to a device that is not a known GamaKay board:
-        // `find_supported` falls back to *any* hidraw node with a 64-byte
-        // feature report, and this worker writes backlight, keymap and macro
-        // packets. The CLI gates on the same thing, with `--force` to override.
-        if gamakay_core::device::by_usb(info.vendor_id, info.product_id).is_empty() {
+        // Never write to a device that is not ours: `find_supported` falls back
+        // to *any* hidraw node with a 64-byte feature report (on this machine,
+        // the Corsair mouse), and this worker writes backlight, keymap and macro
+        // packets. Accepts the wired board, the 2.4 GHz receiver and Bluetooth.
+        if !info.is_gamakay() {
             self.emit(Event::Error(format!(
-                "{} ({:04x}:{:04x}) is not a recognised GamaKay keyboard",
+                "{} ({:04x}:{:04x}, {}) is not a recognised GamaKay keyboard",
                 info.path.display(),
                 info.vendor_id,
-                info.product_id
+                info.product_id,
+                info.connection.label()
             )));
             self.emit(Event::Disconnected);
             return false;
