@@ -133,10 +133,15 @@ jobs:
               useradd -m builder
               install -d -o builder -g builder /home/builder/pkg
               install -o builder -g builder -m644 /src/gamakaylinux-*.tar.gz /home/builder/pkg/
-              install -o builder -g builder -m644 \
-                /src/gamakaylinux-*/packaging/arch/PKGBUILD \
-                /src/gamakaylinux-*/packaging/arch/gamakaylinux.install /home/builder/pkg/
-              su builder -c "cd ~/pkg && makepkg -f --noconfirm --nodeps"
+              # The PKGBUILD and its install scriptlet come out of the tarball
+              # we just built, so they cannot drift from the source being built.
+              su builder -c '
+                cd ~/pkg
+                tar xzf gamakaylinux-*.tar.gz --wildcards "gamakaylinux-*/packaging/arch/*"
+                install -m644 gamakaylinux-*/packaging/arch/PKGBUILD \
+                  gamakaylinux-*/packaging/arch/gamakaylinux.install .
+                makepkg -f --noconfirm --nodeps
+              '
               install -m644 /home/builder/pkg/*.pkg.tar.zst /out/
             '
           ls -l out
