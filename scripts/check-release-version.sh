@@ -12,6 +12,17 @@ cd "$(dirname "$0")/.."
 
 tag="${1:-}"
 tag="${tag#v}"
+# A bare `v` (which the workflows' `v*` filter would match) must not pass as a
+# version, and neither must anything else that is not vX.Y.Z.
+if [ "$#" -ge 1 ]; then
+    case "$tag" in
+        [0-9]*.[0-9]*.[0-9]*) ;;
+        *)
+            echo "error: tag $1 is not vX.Y.Z" >&2
+            exit 1
+            ;;
+    esac
+fi
 
 cargo_version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
 pkgbuild_version="$(sed -n 's/^pkgver=\(.*\)/\1/p' packaging/arch/PKGBUILD | head -1)"

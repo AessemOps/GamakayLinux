@@ -93,6 +93,8 @@ package-appimage: release
 	install -Dm644 packaging/gamakay.desktop $(DIST)/AppDir/gamakay.desktop
 	install -Dm644 packaging/gamakay.desktop \
 		$(DIST)/AppDir/usr/share/applications/gamakay.desktop
+	install -Dm644 packaging/io.github.aessemops.gamakaylinux.metainfo.xml \
+		$(DIST)/AppDir/usr/share/metainfo/io.github.aessemops.gamakaylinux.metainfo.xml
 	install -Dm644 packaging/icons/gamakay.png $(DIST)/AppDir/gamakay.png
 	install -Dm644 packaging/icons/gamakay.png \
 		$(DIST)/AppDir/usr/share/icons/hicolor/256x256/apps/gamakay.png
@@ -101,6 +103,9 @@ package-appimage: release
 	install -Dm644 LICENSE $(DIST)/AppDir/usr/share/doc/gamakaylinux/LICENSE
 	install -Dm644 CREDITS.md $(DIST)/AppDir/usr/share/doc/gamakaylinux/CREDITS.md
 	install -Dm644 README.md $(DIST)/AppDir/usr/share/doc/gamakaylinux/README.md
+	install -Dm644 CHANGELOG.md $(DIST)/AppDir/usr/share/doc/gamakaylinux/CHANGELOG.md
+	install -Dm644 crates/gamakay-gui/assets/NotoEmoji-OFL.txt \
+		$(DIST)/AppDir/usr/share/doc/gamakaylinux/NotoEmoji-OFL.txt
 	ARCH=$(APPIMAGE_ARCH) $(APPIMAGETOOL) $(DIST)/AppDir \
 		$(DIST)/GamakayLinux-$(VERSION)-$(APPIMAGE_ARCH).AppImage
 	@echo "-> $(DIST)/GamakayLinux-$(VERSION)-$(APPIMAGE_ARCH).AppImage"

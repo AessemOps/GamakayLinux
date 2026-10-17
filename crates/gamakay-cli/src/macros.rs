@@ -20,7 +20,7 @@ use gamakay_core::macros::{MACRO_SLOTS, Macro, describe, parse_steps};
 use gamakay_core::transport::Session;
 use gamakay_hidraw::HidrawDevice;
 
-use crate::{Cli, select_device};
+use crate::{Cli, check_writable, select_device};
 
 #[derive(Subcommand)]
 pub enum MacroCmd {
@@ -105,6 +105,7 @@ fn set(cli: &Cli, args: &SetArgs) -> Result<()> {
     let info = select_device(cli)?;
     let mut dev = HidrawDevice::open(&info.path)?;
     let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
+    check_writable(cli, &mut s)?;
     s.write_macro(args.slot, &m)?;
     if cli.dry_run {
         for pkt in s.withheld() {
@@ -130,6 +131,7 @@ fn delete(cli: &Cli, args: &DeleteArgs) -> Result<()> {
     let info = select_device(cli)?;
     let mut dev = HidrawDevice::open(&info.path)?;
     let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
+    check_writable(cli, &mut s)?;
     s.delete_macro(args.slot)?;
     if cli.dry_run {
         for pkt in s.withheld() {

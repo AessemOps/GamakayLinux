@@ -32,8 +32,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# Read-only by default: the packaging jobs run on pull requests too, and none of
+# them needs to write to the repository. Only the publishing job asks for more.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   guard:
@@ -53,6 +55,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
@@ -61,13 +65,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends squashfs-tools file
           mkdir -p "$HOME/.local/bin"
+          # Both tools are executed in the job that mints the release, so both
+          # are pinned to a tag and verified against a known digest: an asset
+          # swapped upstream must not become code execution here.
           curl -fsSL -o nfpm.tar.gz \
             "https://github.com/goreleaser/nfpm/releases/download/v2.48.0/nfpm_2.48.0_Linux_x86_64.tar.gz"
+          echo "6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750  nfpm.tar.gz" | sha256sum -c -
           tar -xzf nfpm.tar.gz -C "$HOME/.local/bin" nfpm
           curl -fsSL -o "$HOME/.local/bin/appimagetool" \
-            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+            "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage"
+          echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  $HOME/.local/bin/appimagetool" | sha256sum -c -
           chmod +x "$HOME/.local/bin/appimagetool"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # A release must not ship something the tests reject.
+      - name: Test
+        run: cargo test --all --locked
 
       - name: Build
         run: cargo build --release --locked
@@ -102,10 +115,13 @@ jobs:
           # it is also what makes this workflow usable before a release. The
           # checkout stays on the host (a `container:` job checks out without
           # .git, and `git archive` needs it).
-          rm -rf /tmp/src && mkdir -p "/tmp/src/gamakaylinux-$version"
-          cp -a . "/tmp/src/gamakaylinux-$version"
-          tar -czf "/tmp/src/gamakaylinux-$version.tar.gz" -C /tmp/src \
-            --exclude=.git --exclude=target --exclude=dist "gamakaylinux-$version"
+          # Build the tarball straight from the working tree and mount *only*
+          # it: an earlier version copied the checkout — including the .git that
+          # holds the checkout credential — into the container.
+          rm -rf /tmp/src && mkdir -p /tmp/src
+          tar -czf "/tmp/src/gamakaylinux-$version.tar.gz" \
+            --transform "s,^\.,gamakaylinux-$version," \
+            --exclude=./.git --exclude=./target --exclude=./dist .
           mkdir -p out
           docker run --rm -v /tmp/src:/src:ro -v "$PWD/out:/out" -w /src archlinux:latest \
             bash -euo pipefail -c '
@@ -147,6 +163,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           name: packages
@@ -166,6 +184,8 @@ jobs:
     container: fedora:latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           name: packages
@@ -195,15 +215,26 @@ jobs:
 
   release:
     needs: [build, arch, verify-deb, verify-rpm, verify-appimage]
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' && github.event_name == 'push'
+    permissions:
+      contents: write
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+      - name: Checksums
+        run: |-
+          cd artifacts
+          find . -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \
+            -o -name '*.pkg.tar.zst' \) -exec sha256sum {} + | sed 's|  \./|  |' \
+            | sort -k2 > SHA256SUMS
+          cat SHA256SUMS
+
       - uses: softprops/action-gh-release@v2
         with:
           files: |-
+            artifacts/SHA256SUMS
             artifacts/packages/*.deb
             artifacts/packages/*.rpm
             artifacts/packages/*.AppImage

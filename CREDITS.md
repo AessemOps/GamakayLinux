@@ -1,7 +1,7 @@
 # Credits
 
 GamakayLinux is GPL-3.0-or-later. It stands on protocol work done by others;
-this file records what was used and how. `Last reviewed: 2026-10-16`.
+this file records what was used and how. `Last reviewed: 2026-10-17`.
 
 ## Protocol references
 
@@ -61,4 +61,6 @@ Bump the `Last reviewed` line above when any of these change.
 | `anyhow` | `anyhow` | MIT OR Apache-2.0 |
 | `serde` | `serde`, `serde_derive` | MIT OR Apache-2.0 |
 | `toml` | `toml`, `toml_edit`, `serde_spanned`, `toml_datetime`, `winnow` | MIT OR Apache-2.0 |
-| `iced` | `iced` (GUI) and its tree (wgpu, winit, cosmic-text, …) | MIT |
+| `iced` | `iced` (GUI) | MIT |
+| `iced` tree | wgpu (MIT OR Apache-2.0), winit (Apache-2.0), cosmic-text (MIT), tiny-skia (BSD-3-Clause), softbuffer (MIT OR Apache-2.0), … | permissive, see each crate |
+| `ttf-parser` | `ttf-parser` (a dev-dependency of the GUI: it checks at test time that the bundled font really has every glyph the UI draws) | MIT OR Apache-2.0 |

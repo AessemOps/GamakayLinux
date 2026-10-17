@@ -25,6 +25,7 @@ working tree so it can run before a tag exists.
 /usr/bin/gamakay-gui                   iced GUI
 /usr/lib/udev/rules.d/70-gamakay.rules grants the local user the hidraw node
 /usr/share/applications/gamakay.desktop
+/usr/share/metainfo/io.github.aessemops.gamakaylinux.metainfo.xml           AppStream, for software centres
 /usr/share/icons/hicolor/<size>/apps/gamakay.png  16..512
 LICENSE, CREDITS.md, README.md         per-format location
 ```

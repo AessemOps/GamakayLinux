@@ -49,6 +49,8 @@ contents:
     dst: /usr/share/icons/hicolor/128x128/apps/gamakay.png
   - src: packaging/icons/hicolor/256x256/apps/gamakay.png
     dst: /usr/share/icons/hicolor/256x256/apps/gamakay.png
+  - src: packaging/io.github.aessemops.gamakaylinux.metainfo.xml
+    dst: /usr/share/metainfo/io.github.aessemops.gamakaylinux.metainfo.xml
   - src: packaging/icons/hicolor/512x512/apps/gamakay.png
     dst: /usr/share/icons/hicolor/512x512/apps/gamakay.png
   # Licences: the two formats keep them in different places.
@@ -61,6 +63,14 @@ contents:
   - src: README.md
     dst: /usr/share/doc/gamakaylinux/README.md
     packager: deb
+  - src: CHANGELOG.md
+    dst: /usr/share/doc/gamakaylinux/CHANGELOG.md
+    packager: deb
+  # The bundled emoji font is OFL-1.1, which requires its licence to travel
+  # with it.
+  - src: crates/gamakay-gui/assets/NotoEmoji-OFL.txt
+    dst: /usr/share/doc/gamakaylinux/NotoEmoji-OFL.txt
+    packager: deb
   - src: LICENSE
     dst: /usr/share/licenses/gamakaylinux/LICENSE
     packager: rpm
@@ -69,6 +79,12 @@ contents:
     packager: rpm
   - src: README.md
     dst: /usr/share/doc/gamakaylinux/README.md
+    packager: rpm
+  - src: CHANGELOG.md
+    dst: /usr/share/doc/gamakaylinux/CHANGELOG.md
+    packager: rpm
+  - src: crates/gamakay-gui/assets/NotoEmoji-OFL.txt
+    dst: /usr/share/licenses/gamakaylinux/NotoEmoji-OFL.txt
     packager: rpm
 
 # The GUI loads its display, input and GPU stack with dlopen at runtime, so `ldd`

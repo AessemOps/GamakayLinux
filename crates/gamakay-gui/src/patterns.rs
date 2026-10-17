@@ -4,7 +4,7 @@
 //!
 //! Ported from sharkfin's `app/src/lib/effects.ts` (GPL-3.0-or-later, © JR
 //! Lanteigne) — a sketch of each vendor effect whose timing comes from the
-//! firmware (see `docs/protocol.md`, "Timing"). Layers and Sine wave follow
+//! firmware (see `docs/protocol.md`, "Writes (SET) — the flow matters"). Layers and Sine wave follow
 //! the yc500 firmware scripts; the other shapes are the reference's
 //! approximations, not the board's own routines.
 

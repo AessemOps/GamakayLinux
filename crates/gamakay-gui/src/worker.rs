@@ -37,6 +37,10 @@ pub enum Request {
         events: Vec<MacroEvent>,
     },
     DeleteMacro(u8),
+    /// Read the 50 macro slots. Sent when the Macros tab is opened rather than
+    /// on connect: it is 200 feature transfers, and the connect path must stay
+    /// small or the board's control endpoint stalls and needs a replug.
+    ReadMacros,
 }
 
 /// A summary of the attached board.
@@ -89,6 +93,11 @@ struct Worker {
     /// The macros read from the board, kept so a write can update the list
     /// without re-reading all 50 slots (200 feature transfers).
     macros: Vec<(u8, String)>,
+    /// Whether the identified board is the one this build targets. Writes are
+    /// refused until it is: the USB ids only pick a candidate, and the GUI must
+    /// not write backlight, keymap or macro packets to a board it has not
+    /// identified as an LK67 (`docs/protocol.md`, the device table).
+    writes_allowed: bool,
     /// The last layer read from the board: `(profile, fn_layer, keymap)`. Binding
     /// a key is a read-modify-write of the whole layer, and a layer read is two
     /// 8-page passes, so keeping what was just read saves that on every bind.
@@ -102,6 +111,7 @@ impl Worker {
             device: None,
             fn_locked: &[],
             macros: Vec::new(),
+            writes_allowed: false,
             layer: None,
         }
     }
@@ -119,21 +129,46 @@ impl Worker {
                     self.device = None;
                     self.connect_and_read();
                 }
-                Request::SetLayer(p) => self.set_layer(p),
+                Request::SetLayer(p) => {
+                    if self.writable() {
+                        self.set_layer(p);
+                    }
+                }
                 Request::ReadLayer(fn_layer) => self.read_layer(fn_layer),
-                Request::SetBacklight(p) => self.set_backlight(&p),
-                Request::SetBacklightOff(off) => self.set_backlight_off(off),
+                Request::SetBacklight(p) => {
+                    if self.writable() {
+                        self.set_backlight(&p);
+                    }
+                }
+                Request::SetBacklightOff(off) => {
+                    if self.writable() {
+                        self.set_backlight_off(off);
+                    }
+                }
                 Request::SetSlot {
                     fn_layer,
                     slot,
                     value,
-                } => self.set_slot(fn_layer, slot, value),
+                } => {
+                    if self.writable() {
+                        self.set_slot(fn_layer, slot, value);
+                    }
+                }
                 Request::SetMacro {
                     slot,
                     repeat,
                     events,
-                } => self.set_macro(slot, repeat, events),
-                Request::DeleteMacro(slot) => self.delete_macro(slot),
+                } => {
+                    if self.writable() {
+                        self.set_macro(slot, repeat, events);
+                    }
+                }
+                Request::DeleteMacro(slot) => {
+                    if self.writable() {
+                        self.delete_macro(slot);
+                    }
+                }
+                Request::ReadMacros => self.read_macros(),
             }
         }
     }
@@ -147,7 +182,6 @@ impl Worker {
         self.read_backlight();
         self.read_layer(false);
         self.read_layer(true);
-        self.read_macros();
     }
 
     /// Make sure the board is open, re-enumerating when the cached node has
@@ -251,6 +285,7 @@ impl Worker {
             return;
         };
         let record = gamakay_core::device::by_id(id);
+        self.writes_allowed = record.is_some_and(|r| r.id == gamakay_core::device::LK67.id);
         self.fn_locked = record.map(|r| r.fn_locked).unwrap_or(&[]);
         let model = record
             .map(|r| r.display_name.to_string())
@@ -337,6 +372,18 @@ impl Worker {
 
     /// Select the active profile. The keymap commands address the active
     /// profile, so this is how a different keymap layer is opened.
+    /// Whether a write may go out. Emits the reason and answers `false` when
+    /// the board is not the one this build targets.
+    fn writable(&mut self) -> bool {
+        if self.writes_allowed {
+            return true;
+        }
+        self.emit(Event::Error(
+            "the attached device did not identify as an LK67; not writing to it".into(),
+        ));
+        false
+    }
+
     fn set_layer(&mut self, profile: u8) {
         if self.with_session(|s| s.set_profile(profile)).is_none() {
             return;
@@ -368,7 +415,10 @@ impl Worker {
                     None => return,
                 },
             };
-            km.set(slot as usize, Slot::from_value(value));
+            if !km.set(slot as usize, Slot::from_value(value)) {
+                self.emit(Event::Error(format!("slot {slot} is not in the layer")));
+                return;
+            }
             match self.with_session(|s| s.write_layer(profile, &km, fn_layer)) {
                 Some(()) => {
                     self.layer = Some((profile, fn_layer, km.clone()));

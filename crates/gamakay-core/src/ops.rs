@@ -3,6 +3,7 @@
 //! decoder. Writes live in the feature modules added in later phases.
 
 use crate::cmd;
+use crate::device;
 use crate::error::{Error, Result};
 use crate::packet::Checksum;
 use crate::transport::Session;
@@ -107,7 +108,18 @@ impl Session<'_> {
     /// commits it (the usual commit pause applies). Keymap reads and writes
     /// address whichever profile is active, so this is also how a different
     /// keymap layer is selected.
+    /// Select the active profile.
+    ///
+    /// The board has eight. Anything else would make an undefined profile
+    /// active and leave it active, which changes what the user types, so an
+    /// out-of-range index is refused rather than sent.
     pub fn set_profile(&mut self, p: u8) -> Result<()> {
+        if p >= device::PROFILES {
+            return Err(Error::OutOfRange {
+                field: "profile",
+                value: i64::from(p),
+            });
+        }
         self.send(cmd::SET_PROFILE, &[p], Checksum::Bit7)
     }
 

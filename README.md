@@ -1,191 +1,156 @@
 # GamakayLinux
 
-A Linux-native replacement for the GamaKay keyboard driver app, in Rust, for
-the **GamaKay LK67**. It configures the keyboard over its **USB cable**, with no
-resident process: every setting is written to the keyboard's own memory and the
-program exits.
+**Your GamaKay LK67, configured from Linux — natively, without the Windows app.**
 
-> Status: **Phase 6** — `list` / `info`, lighting, the base and Fn keymaps, the
-> macro recorder and an iced GUI (`gamakay-gui`) are implemented and verified on
-> hardware, and packaged for Arch, Debian/Ubuntu, Fedora/RHEL and as an AppImage.
-> See `.kilo/plans/1792003709046-gamakay-linux-rust-app.md`.
->
-> The 2026-10 firmware update re-enumerated the board as `3151:4003` (id 290);
-> both the new and the pre-update ids are supported.
+[![ci](https://github.com/AessemOps/GamakayLinux/actions/workflows/ci.yml/badge.svg)](https://github.com/AessemOps/GamakayLinux/actions/workflows/ci.yml)
+[![license: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 
-## Why
+GamaKay only ships a Windows Electron app for the LK67. This is a native Rust
+replacement: lighting, keymaps, macros and device info, written straight to the
+keyboard's own memory over USB, with a GUI and a scriptable CLI.
 
-The vendor app is a Windows-only Electron bundle. This project speaks the
-board's HID protocol directly from Linux:
+- **Nothing stays resident.** Every command writes to onboard memory and exits —
+  no tray daemon, no background service, no kernel module.
+- **The keyboard keeps typing while you configure it.** It speaks the ROYUAN
+  `yc500` protocol over Linux **hidraw**, so the kernel driver stays bound;
+  no libusb, no device detaching.
+- **No root, once the udev rule is installed.** The packages ship it.
+- **Nothing that can brick the board.** A command allow-list plus a
+  destructive/boot block-list sits in front of every write, and there is no
+  firmware-flashing path at all.
+- **Packaged for Arch, Debian/Ubuntu, Fedora/RHEL and as an AppImage.**
 
-- **hidraw, not libusb.** The kernel driver stays bound, so the keyboard keeps
-  typing while you configure it.
-- **No resident process by default.** Settings go to onboard memory
-  (`support_onboard: 2`); nothing stays running.
-- **Minimal footprint.** The CLI is one-shot; the GUI only runs while open and
-  idle at ~0% CPU.
-- **Safe.** A command allow-list and a destructive/boot block-list sit in front
-  of every write, and there is no firmware-flashing path.
+## Features
 
-## Layout
-
-| Path | What it is |
+| | |
 |---|---|
-| `crates/gamakay-core/` | Protocol encode/decode, device table, safety guard, `Transport` trait and the fixture `MockTransport` |
-| `crates/gamakay-hidraw/` | Linux hidraw transport: sysfs enumeration and the `HIDIOCSFEATURE`/`HIDIOCGFEATURE` ioctls |
-| `crates/gamakay-cli/` | The `gamakay` binary |
-| `docs/protocol.md` | Command reference, byte layouts, transport matrix (the allow-list source of truth) |
-| `docs/re-workflow.md` | How the protocol was captured and how to extend it |
-| `docs/packaging.md` | How the four package formats are built, and why each choice was made |
-| `tests/fixtures/` | Decoded packet fixtures (hex) |
-| `packaging/` | udev rule, desktop entry and icons, `nfpm.yaml` (deb + rpm), Arch `PKGBUILD`, AppImage `AppRun` |
-| `scripts/` | Capture/decode helpers, icon generation, the release version guard |
+| **Lighting** | Onboard modes with brightness, speed and direction, rainbow, and a colour picker with a live preview of the board. |
+| **Keymap** | Remap any key on the base **and Fn** layers, across the board's **8 profiles**. Remap by pressing a key on the keyboard, or pick one from a VIA-style list of ~200 keys — media, modifiers, macros, profiles. |
+| **Macros** | 50 onboard slots with a **recorder**: press Record, type the macro, press Stop, save it to a slot. Delays are captured, so the take keeps your typing rhythm. A CLI step DSL covers scripted cases. |
+| **Device info** | Firmware, active profile, the options the firmware exposes. |
+| **GUI + CLI** | An iced app for interactive work; a `gamakay` command for scripts, profiles and CI. |
+
+![The lighting tab: the board's live preview, its controls, and the colour wheel](docs/images/lighting.png)
 
 ## Install
 
-Packages are built from a tag for four targets; every one installs the CLI, the
-GUI, the udev rule and the desktop entry:
+Grab the package for your distribution from the
+[latest release](https://github.com/AessemOps/GamakayLinux/releases), or build
+them yourself (see [docs/packaging.md](docs/packaging.md)):
 
-| target | artefact | tool |
-|---|---|---|
-| Arch / CachyOS | `gamakaylinux-<ver>-1-<arch>.pkg.tar.zst` | `makepkg` |
-| Debian / Ubuntu | `gamakaylinux_<ver>_amd64.deb` | `nfpm` |
-| Fedora / RHEL | `gamakaylinux-<ver>-1.x86_64.rpm` | `nfpm` |
-| any Linux (portable) | `GamakayLinux-<ver>-x86_64.AppImage` | `appimagetool` |
-
-`sudo pacman -U …`, `sudo apt install ./…deb`, `sudo dnf install ./…rpm`, or
-`chmod +x …AppImage && ./…AppImage`. The deb, rpm and Arch packages install the
-udev rule and reload udev for you; an AppImage cannot touch `/etc`, so with it
-either use the tools read-only or install the rule it ships
-(`/usr/share/udev/70-gamakay.rules` inside the archive) by hand.
-
-Building them yourself, and what each format does and does not bundle, is in
-[`docs/packaging.md`](docs/packaging.md):
+| Distribution | Package |
+|---|---|
+| Arch / CachyOS | `gamakaylinux-<ver>-1-<arch>.pkg.tar.zst` |
+| Debian / Ubuntu | `gamakaylinux_<ver>_amd64.deb` |
+| Fedora / RHEL | `gamakaylinux-<ver>-1.x86_64.rpm` |
+| Anything else | `GamakayLinux-<ver>-x86_64.AppImage` |
 
 ```bash
-make packages        # deb + rpm + AppImage into dist/
-make package-arch    # on Arch, via makepkg
-make package-verify  # list what actually landed in the artefacts
+sudo pacman -U gamakaylinux-*.pkg.tar.zst
+sudo apt install ./gamakaylinux_*.deb
+sudo dnf install ./gamakaylinux-*.rpm
+chmod +x GamakayLinux-*.AppImage && ./GamakayLinux-*.AppImage
 ```
 
-## Build and test
+The deb, rpm and Arch packages install a **udev rule** that lets you configure
+the keyboard as your normal user, and reload udev for you. An AppImage cannot
+touch `/etc`: install the rule it ships (`/usr/share/udev/70-gamakay.rules`
+inside the archive), or run the tools as root.
+
+## Quick start
 
 ```bash
-cargo build --release          # gamakay, statically usable, stripped + LTO
-cargo test                     # unit tests + fixture replay
-cargo clippy --all-targets -- -D warnings
-cargo fmt --all --check
+gamakay list                     # every HID node, with the board marked
+gamakay info                     # model, firmware, active profile
+gamakay light set --rgb ff00aa --brightness 3 --mode wave
+gamakay keymap set --slot 9 --to Esc        # by slot
+gamakay keymap get --fn                     # the Fn layer
+gamakay keymap reset --yes                  # back to the board's defaults
+gamakay macro set 3 --steps 'H+@20, i+@30, i-@40' --repeat 1
+gamakay apply my-profile                    # a TOML profile of lighting + remaps
 ```
 
-## Use
+`gamakay --dry-run …` prints the exact packets a command would send and sends
+no writes. `gamakay <command> --help` has the rest; `docs/protocol.md` documents
+the wire protocol itself.
 
-`gamakay list` shows every hidraw node and marks the one carrying the 64-byte
-settings report. `gamakay info` identifies the board and reads its current
-settings. `gamakay light` reads and sets the backlight, and `gamakay apply`
-applies a TOML profile.
+The GUI opens with `gamakay-gui` (or `gamakay-gui macros` to start on a tab).
+It shares one worker thread with the device, so a slow board never freezes the
+window, and it is a single window that does nothing when idle.
+
+## How it works
+
+The LK67 exposes a 64-byte HID **feature report** on its keyboard collection.
+Every setting is a feature transfer with an opcode, a checksum, and — for the
+keymap and macros — 56-byte pages it commits to flash.
+
+Two things surprise people, and both are handled:
+
+- **Writing is fire-and-forget.** A read inside the flash-commit window stalls
+  the board's settings endpoint until it is re-enumerated, so the tool waits the
+  commit out rather than polling. If a write is ever interrupted, unplug and
+  replug the keyboard; typing is never affected.
+- **The keymap is per profile.** Eight separate keymaps exist and the protocol
+  only ever addresses the *active* one, so selecting a profile to edit is a real
+  change to the board: the tool restores the profile you were on when it is
+  done.
+
+## Compatibility
+
+| | |
+|---|---|
+| Keyboard | GamaKay LK67 (`yzw_lk67`, ROYUAN `yc500` family) |
+| Firmware | `3151:4003` (2026-10 update, id 290) and `0461:4002` (id 149) |
+| Transport | **USB cable only** |
+| OS | Linux with `hidraw` (any distribution; packages above) |
+
+**2.4 GHz and Bluetooth are out of scope.** They were investigated and dropped,
+with the measurements kept in [docs/protocol.md](docs/protocol.md) → "Scope: USB
+cable": the receiver declares no HID feature report, so this protocol cannot be
+addressed over it at all. Mode switching and pairing are physical (the switch on
+the keyboard), not configurable from software.
+
+Other boards that share these USB ids are refused before anything is written —
+the tool identifies the board with a handshake, not by VID/PID — and
+`--force` overrides that when you know better.
+
+## Safety
+
+- Every write passes a guard holding a default-deny **allow-list** of the
+  commands in `docs/protocol.md` and a **block-list** of destructive and
+  bootloader opcodes. No firmware-flashing path exists in the code.
+- Reads and writes are length- and checksum-checked; a short transfer from the
+  board is an error, not zero-filled data.
+- The board's firmware-owned Fn keys (the red ones in the preview) cannot be
+  remapped: the GUI marks them and the tool refuses those slots.
+- If a board stops answering, `gamakay keymap reset --yes` sends the factory
+  reset (`0x02`); the LK67 also resets with `Fn`+`Esc` held for about three
+  seconds.
+
+## Development
 
 ```bash
-gamakay list
-gamakay info
-gamakay --device /dev/hidraw0 info
-
-gamakay light                                        # show backlight (and edge)
-gamakay light set --mode wave --color ff0000 --brightness 3 --speed 2 --direction 1
-gamakay light off                                    # options bit, not a black write
-gamakay light on
-gamakay apply ~/.config/gamakay/profiles/olivia.toml
-
-gamakay keymap get                                   # list the base layer
-gamakay keymap set --key CapsLock --to Esc           # remap by name
-gamakay keymap set --slot 3 --to none                # clear a slot
-gamakay keymap reset --yes                           # factory reset (whole board)
-
-gamakay macro list                                   # onboard macros
-gamakay macro set 0 --repeat 1 --steps "A+@20, A-@20"
-gamakay keymap set --slot 20 --to macro:0            # bind macro 0 to a key
+make check     # fmt --check, clippy -D warnings, the test suite
+make release   # LTO, stripped, panic=abort
+make packages  # deb + rpm + AppImage into dist/
+make package-arch
 ```
 
-A profile is TOML; unspecified fields keep their current value:
+| Path | What it is |
+|---|---|
+| `crates/gamakay-core/` | Protocol encode/decode, device table, safety guard, `Transport` trait |
+| `crates/gamakay-hidraw/` | The Linux hidraw layer: sysfs enumeration and the feature-report ioctls |
+| `crates/gamakay-cli/` · `crates/gamakay-gui/` | The two front-ends |
+| `docs/protocol.md` | The command reference, byte layouts and what is safe |
+| `docs/packaging.md` · `docs/re-workflow.md` | How it is packaged; how the protocol was captured |
+| `.kilo/plans/` | The implementation plans, for anyone picking this up |
 
-```toml
-[backlight]
-mode = "wave"        # static, breathing, spectrum, wave, ripple, ...
-color = "#9507e1"
-brightness = 3       # 0..5 on the LK67
-speed = 2            # 0 slowest .. 4 fastest
-direction = 1        # for modes that use one
-rainbow = false      # false = fixed colour
+## Changelog
 
-[edge]
-mode = "static"      # only on boards that have an edge light
-color = "#00ff00"
-
-[keymap]             # base-layer remaps; key is a slot number or a key name
-CapsLock = "Esc"
-"71" = "none"
-```
-
-`--dry-run` prints the packet a command would send and sends nothing.
-
-### GUI
-
-`gamakay-gui` is an iced 0.13 front-end over the same core: a **keyboard
-canvas** drawn from the LK67 layout, with tabs for Info, Lighting, Keymap
-(base and Fn) and Macros. The canvas shows every key with its current binding;
-click a key to select it and the pending rebind is previewed on the key. The
-Lighting tab has a **hue/saturation colour wheel** (click or drag to pick) and
-a **live, animated preview** — the board reflects the colour, rainbow and
-brightness, and reproduces the selected mode (static, breathing, spectrum,
-wave, ripple/radiant, star dots, flow, key shadow, layers, sine, spring, neon,
-loop, colour grid, snowfall, meteor, silent snow). The mode animations are
-**best-effort approximations** of the firmware (built from the timing tables in
-`docs/protocol.md`), not byte-exact; the reactive modes (key shadow, and modes
-that spawn on a key press) show their idle state. All device I/O runs on a
-worker thread, so the window never blocks, and the animation only runs on the
-Lighting tab. The Macros tab has a **recorder**: press Record, type the macro on
-the keyboard, press Stop, then save it to one of the 50 onboard slots (the slot
-list shows what each slot holds). Each keystroke becomes a press/release event
-carrying the pause before it, so the take reproduces your typing rhythm; a key
-still held when recording stops is released, a key the board cannot send is
-skipped, and the take is stopped before it outgrows the 256-byte slot.
-`gamakay-gui lighting` (or `keymap`/`macros`/`info`) opens on a given tab.
-
-```bash
-gamakay-gui              # opens on the Info tab
-gamakay-gui lighting
-```
-
-### Writing
-
-A write is **fire-and-forget**: the board applies it and commits it to onboard
-memory, and `gamakay` pauses before the next command so the settings endpoint
-stays healthy. Verify a write with a following read (`gamakay light`, `gamakay
-macro list`). If a write is interrupted and the endpoint stalls, unplug and
-replug the keyboard (typing is never affected). See `docs/protocol.md`.
-
-### Permissions
-
-`/dev/hidraw*` is root-only by default. The deb, rpm and Arch packages install
-the udev rule and reload udev for you; from a source checkout, or with the
-AppImage, install it once by hand and replug:
-
-```bash
-sudo install -Dm644 packaging/udev/70-gamakay.rules /etc/udev/rules.d/
-sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
-```
-
-The rule grants the active local user access with `TAG+="uaccess"` — no group
-membership needed.
-
-## Transport support
-
-**USB cable only.** 2.4 GHz and Bluetooth were investigated and dropped: the
-receiver (`25a7:fa17`, "RONGYUAN 2.4G Wireless Device") declares no HID feature
-report on any of its three interfaces, so the protocol — 64-byte feature reports,
-report id 0 — cannot be addressed over it, and Bluetooth was never captured. The
-transport matrix in `docs/protocol.md` records what was measured; features a
-transport does not carry are disabled rather than guessed.
+What changed in each release, including the audit fixes that went into 0.1.0, is
+in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-GPL-3.0-or-later. See `LICENSE` and `CREDITS.md`.
+GPL-3.0-or-later. Third-party attribution — including the bundled Noto Emoji
+font and the parts ported from other projects — is in [CREDITS.md](CREDITS.md).

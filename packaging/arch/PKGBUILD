@@ -40,6 +40,9 @@ package() {
   install -Dm644 packaging/gamakay.desktop \
     "$pkgdir/usr/share/applications/gamakay.desktop"
 
+  install -Dm644 packaging/io.github.aessemops.gamakaylinux.metainfo.xml \
+    "$pkgdir/usr/share/metainfo/io.github.aessemops.gamakaylinux.metainfo.xml"
+
   for size in 16 24 32 48 64 128 256 512; do
     install -Dm644 "packaging/icons/hicolor/${size}x${size}/apps/gamakay.png" \
       "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/gamakay.png"
@@ -47,4 +50,9 @@ package() {
 
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 CREDITS.md "$pkgdir/usr/share/licenses/$pkgname/CREDITS.md"
+  # OFL-1.1 requires the licence to travel with the bundled emoji font.
+  install -Dm644 crates/gamakay-gui/assets/NotoEmoji-OFL.txt \
+    "$pkgdir/usr/share/licenses/$pkgname/NotoEmoji-OFL.txt"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 CHANGELOG.md "$pkgdir/usr/share/doc/$pkgname/CHANGELOG.md"
 }

@@ -31,6 +31,9 @@ pub enum Error {
     DeviceNotFound,
     /// The value the caller passed is out of range for the field.
     OutOfRange { field: &'static str, value: i64 },
+    /// Two full reads of a layer disagreed, so neither can be trusted. Writing
+    /// an unconfirmed layer back would persist a mixture of the two keymaps.
+    UnstableLayer { tries: u32 },
 }
 
 impl fmt::Display for Error {
@@ -71,6 +74,10 @@ impl fmt::Display for Error {
             Self::OutOfRange { field, value } => {
                 write!(f, "{field} = {value} is out of range")
             }
+            Self::UnstableLayer { tries } => write!(
+                f,
+                "the board returned a different keymap on each of {tries} reads; refusing to act on an unconfirmed layer (replug the keyboard and retry)"
+            ),
         }
     }
 }

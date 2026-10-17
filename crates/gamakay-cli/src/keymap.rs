@@ -10,7 +10,7 @@ use gamakay_core::keymap::{Slot, SlotValue};
 use gamakay_core::transport::Session;
 use gamakay_hidraw::HidrawDevice;
 
-use crate::{Cli, select_device};
+use crate::{Cli, check_writable, select_device};
 
 #[derive(Subcommand)]
 pub enum KeymapCmd {
@@ -69,18 +69,55 @@ pub fn run(cli: &Cli, action: &KeymapCmd) -> Result<()> {
     }
 }
 
-fn active_profile(s: &mut Session<'_>, requested: Option<u8>) -> u8 {
-    requested.unwrap_or_else(|| s.profile().unwrap_or(0))
+/// Run `f` against the requested profile, activating it first and restoring the
+/// previously active one afterwards.
+///
+/// The keymap commands always address the **active** profile — the firmware
+/// ignores the profile byte in their payload — so `--profile N` has to select
+/// the profile, and it must not leave the board on a different layer than the
+/// user was typing on.
+fn with_profile<T>(
+    s: &mut Session<'_>,
+    requested: Option<u8>,
+    f: impl FnOnce(&mut Session<'_>, u8) -> Result<T>,
+) -> Result<T> {
+    let previous = s.profile().context("reading the active profile")?;
+    let Some(want) = requested else {
+        return f(s, previous);
+    };
+    let layers = s
+        .device_id()
+        .ok()
+        .and_then(gamakay_core::device::by_id)
+        .map(|r| r.layer)
+        .unwrap_or(1);
+    if want >= layers {
+        bail!(
+            "profile {want} does not exist: this board has profiles 0..{}",
+            layers - 1
+        );
+    }
+    if want == previous {
+        return f(s, previous);
+    }
+    s.set_profile(want).context("selecting the profile")?;
+    let out = f(s, want);
+    if let Err(e) = s.set_profile(previous) {
+        eprintln!("warning: could not restore profile {previous}: {e}");
+    }
+    out
 }
 
 fn get(cli: &Cli, args: &GetArgs) -> Result<()> {
     let info = select_device(cli)?;
     let mut dev = HidrawDevice::open(&info.path)?;
     let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
-    let profile = active_profile(&mut s, args.profile);
-    let layer = s
-        .read_layer(profile, args.fn_layer)
-        .context("reading keymap")?;
+    let (profile, layer) = with_profile(&mut s, args.profile, |s, profile| {
+        let layer = s
+            .read_layer(profile, args.fn_layer)
+            .with_context(|| format!("reading keymap of profile {profile}"))?;
+        Ok((profile, layer))
+    })?;
     let which = if args.fn_layer { "Fn" } else { "base" };
     println!("profile {profile}, {which} layer:");
     let mut shown = 0;
@@ -104,29 +141,50 @@ fn set(cli: &Cli, args: &SetArgs) -> Result<()> {
     let info = select_device(cli)?;
     let mut dev = HidrawDevice::open(&info.path)?;
     let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
-    let profile = active_profile(&mut s, args.profile);
-    let mut layer = s.read_layer(profile, args.fn_layer)?;
+    check_writable(cli, &mut s)?;
 
-    let slot = match (args.slot, &args.key) {
-        (Some(n), _) => n,
-        (None, Some(name)) => layer.find_by_name(name).ok_or_else(|| {
-            anyhow::anyhow!("no key named {name:?} in the current layer; use --slot")
-        })? as u8,
-        (None, None) => bail!("give --slot or --key"),
-    };
     let value = parse_bind(&args.to)?;
     let new = Slot::from_value(value);
-    layer.set(slot as usize, new);
 
-    // The LK67 ignores the single-slot write (0x13), so upload the whole layer.
-    s.write_layer(profile, &layer, args.fn_layer)?;
+    // The read-modify-write has to happen while the requested profile is the
+    // active one: the write addresses the active profile, not the one in its
+    // payload.
+    let (profile, slot) = with_profile(&mut s, args.profile, |s, profile| {
+        let mut layer = s.read_layer(profile, args.fn_layer)?;
+        let slot = match (args.slot, &args.key) {
+            (Some(n), _) => n,
+            (None, Some(name)) => layer
+                .find_by_name(name)
+                .ok_or_else(|| anyhow::anyhow!("no key named {name:?} in this layer; use --slot"))?
+                as u8,
+            (None, None) => bail!("give --slot or --key"),
+        };
+        // Slot 126/127 are past what a bulk write transmits, and anything at or
+        // past SLOTS is not a slot at all: say so rather than report a write
+        // that cannot land (or abort on an out-of-bounds index).
+        let index = slot as usize;
+        if index >= gamakay_core::keymap::TX_SLOTS {
+            bail!(
+                "slot {slot} cannot be written: a bulk write reaches slots 0..{}; \
+                 slots {}..{} are read-only on this firmware",
+                gamakay_core::keymap::TX_SLOTS - 1,
+                gamakay_core::keymap::TX_SLOTS,
+                gamakay_core::keymap::SLOTS - 1
+            );
+        }
+        assert!(layer.set(index, new));
+        // The LK67 ignores the single-slot write (0x13), so upload the layer.
+        s.write_layer(profile, &layer, args.fn_layer)?;
+        Ok((profile, slot))
+    })?;
+
     if cli.dry_run {
         for pkt in s.withheld() {
             let hex: Vec<String> = pkt.iter().take(16).map(|b| format!("{b:02x}")).collect();
             println!("dry run: {}", hex.join(" "));
         }
     } else {
-        println!("slot {slot} -> {}", new.describe());
+        println!("slot {slot} in profile {profile} -> {}", new.describe());
     }
     Ok(())
 }
@@ -138,6 +196,7 @@ fn reset(cli: &Cli, args: &ResetArgs) -> Result<()> {
     let info = select_device(cli)?;
     let mut dev = HidrawDevice::open(&info.path)?;
     let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
+    check_writable(cli, &mut s)?;
     s.factory_reset()?;
     if cli.dry_run {
         for pkt in s.withheld() {
@@ -175,11 +234,16 @@ pub(crate) fn parse_bind(s: &str) -> Result<SlotValue> {
     }
 }
 
+/// 0 repeat, 1 toggle, 2 hold. Anything else is a byte the firmware does not
+/// define, so it is refused rather than written.
 fn parse_macro_mode(s: &str) -> Result<u8> {
     match s.to_ascii_lowercase().as_str() {
         "repeat" => Ok(0),
         "toggle" => Ok(1),
         "hold" => Ok(2),
-        other => other.parse().context("macro mode (repeat, toggle, hold)"),
+        other => match other.parse::<u8>() {
+            Ok(n) if n <= 2 => Ok(n),
+            _ => bail!("macro mode must be repeat, toggle or hold (0..=2), got {s:?}"),
+        },
     }
 }

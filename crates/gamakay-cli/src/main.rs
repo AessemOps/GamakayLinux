@@ -96,7 +96,7 @@ fn main() {
             eprintln!();
             eprintln!("hint: the keyboard's settings endpoint has stalled. It does not recover");
             eprintln!("on reopen: unplug and replug the keyboard (typing is unaffected).");
-            eprintln!("See \"Stalled endpoint\" in docs/protocol.md.");
+            eprintln!("See \"Writes (SET) — the flow matters\" in docs/protocol.md.");
         }
         std::process::exit(1);
     }
@@ -224,6 +224,31 @@ fn cmd_info(cli: &Cli) -> Result<()> {
 }
 
 /// The node to talk to: `--device`, else the auto-detected settings node.
+/// Refuse a write to a board that is not the one this build targets.
+///
+/// The USB ids only pick a *candidate*: the LK67's ids are shared with a sibling
+/// board, and a board with mismatched firmware answers the handshake with a
+/// different id, so the decision is made on what the board says it is rather
+/// than on what it enumerates as. `--force` overrides, as documented.
+pub(crate) fn check_writable(cli: &Cli, s: &mut Session<'_>) -> Result<()> {
+    if cli.force {
+        return Ok(());
+    }
+    let id = s.device_id().context("identifying the board")?;
+    match device::by_id(id) {
+        Some(rec) if rec.id == device::LK67.id => Ok(()),
+        Some(rec) => bail!(
+            "the attached board reports id {id} ({}), not the LK67; refusing to write \
+             (pass --force to override)",
+            rec.display_name
+        ),
+        None => bail!(
+            "the attached board reports unknown id {id}; refusing to write \
+             (pass --force to override)"
+        ),
+    }
+}
+
 pub(crate) fn select_device(cli: &Cli) -> Result<HidrawInfo> {
     let found = match &cli.device {
         Some(path) => gamakay_hidraw::find(path)

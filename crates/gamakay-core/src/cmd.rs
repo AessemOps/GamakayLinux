@@ -43,8 +43,10 @@ pub const GET_FN: u8 = 0x90;
 /// Debounce, range 1..10, value at byte 2.
 pub const SET_DEBOUNCE: u8 = 0x11;
 pub const GET_DEBOUNCE: u8 = 0x91;
-/// Sleep timers: four u16 LE seconds at bytes 8..16 on SET; the GET reply
-/// places them at bytes 1..9 (an asymmetry in the firmware).
+/// Sleep timers: four u16 LE seconds at bytes 8..16, on both SET and the GET
+/// reply. The vendor notes mention a reply at bytes 1..9, but byte 7 is this
+/// request's checksum on our board, so we read the SET offsets — see
+/// `docs/protocol.md`, "Sleep GET offsets".
 pub const SET_SLEEPTIME: u8 = 0x12;
 pub const GET_SLEEPTIME: u8 = 0x92;
 /// One keymap slot, `[profile, slot]`, value at bytes 8..12.

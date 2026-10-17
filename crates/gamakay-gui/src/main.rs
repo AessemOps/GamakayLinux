@@ -121,6 +121,8 @@ struct App {
     macro_note: String,
     /// The slot picker's entries, rebuilt when the stored macros change.
     slot_choices: Vec<SlotChoice>,
+    /// Whether the macro slots have been read this session (done on demand).
+    macros_loaded: bool,
 }
 
 /// One entry of the slot picker: its index and a label naming what the slot
@@ -230,6 +232,7 @@ impl App {
             recorder: recorder::Recorder::default(),
             macro_note: String::new(),
             slot_choices: Vec::new(),
+            macros_loaded: false,
         };
         app.rebuild_slot_choices();
         let _ = app.req.send(Request::Connect);
@@ -238,7 +241,15 @@ impl App {
 
     fn update(&mut self, message: Message) {
         match message {
-            Message::Tab(t) => self.tab = t,
+            Message::Tab(t) => {
+                self.tab = t;
+                // The macro list is read on demand: at connect it would be 200
+                // feature transfers before the window can do anything useful.
+                if t == Tab::Macros && !self.macros_loaded {
+                    self.macros_loaded = true;
+                    self.send(Request::ReadMacros);
+                }
+            }
             Message::Connect => {
                 self.status = "connecting…".into();
                 self.send(Request::Connect);
@@ -358,6 +369,7 @@ impl App {
                 }
             }
             Event::Macros(m) => {
+                self.macros_loaded = true;
                 self.macros = m;
                 self.rebuild_slot_choices();
             }
@@ -378,8 +390,18 @@ impl App {
     }
 
     fn apply_light(&mut self) {
-        let mode = Mode::from_name(&self.mode).map(Mode::code).unwrap_or(1);
-        let rgb = color::parse_hex(&self.color).unwrap_or([0xff, 0x00, 0x00]);
+        // Both fields feed a write, so neither may fall back to a default: a
+        // mistyped colour silently becoming red, or an unmodelled board mode
+        // becoming "static", would change the keyboard to something the user
+        // did not ask for. Refuse and say why.
+        let Some(mode) = self.current_mode_code() else {
+            self.status = format!("unknown mode {:?}; not sent", self.mode);
+            return;
+        };
+        let Some(rgb) = color::parse_hex(&self.color) else {
+            self.status = format!("colour {:?} is not #rrggbb; not sent", self.color);
+            return;
+        };
         let p = LedParam {
             mode,
             speed: self.speed,
@@ -419,7 +441,14 @@ impl App {
             self.macro_note = "record something first".into();
             return;
         }
-        let repeat = self.macro_repeat.trim().parse::<u16>().unwrap_or(1).max(1);
+        let repeat = match self.macro_repeat.trim().parse::<u16>() {
+            Ok(n) if n >= 1 => n,
+            _ => {
+                self.macro_note =
+                    format!("repeat must be a number >= 1, not {:?}", self.macro_repeat);
+                return;
+            }
+        };
         self.macro_note.clear();
         self.send(Request::SetMacro {
             slot: self.macro_slot,
@@ -571,10 +600,23 @@ impl App {
         section("Device".to_string(), grid.into())
     }
 
+    /// The mode code the mode field means: a known name, or the numeric code
+    /// the board reported (which may be a mode this build does not model, and
+    /// must round-trip rather than be replaced by a default).
+    fn current_mode_code(&self) -> Option<u8> {
+        if let Some(code) = Mode::from_name(&self.mode).map(Mode::code) {
+            return Some(code);
+        }
+        match self.mode.trim().parse::<u8>() {
+            Ok(n) if (1..=25).contains(&n) => Some(n),
+            _ => None,
+        }
+    }
+
     /// The preview parameters the lighting controls currently describe.
     fn pattern_params(&self) -> patterns::Params {
         patterns::Params {
-            mode: Mode::from_name(&self.mode).map(Mode::code).unwrap_or(1),
+            mode: self.current_mode_code().unwrap_or(1),
             speed: self.speed,
             brightness: self.brightness,
             brightness_max: 4,

@@ -2,8 +2,8 @@
 //! Onboard macros: 50 slots x 256 bytes.
 //!
 //! A macro blob is a u16 LE repeat count, a stream of events, and a four-byte
-//! zero terminator. Writes are paginated (`0x16`, 56 bytes a page, only the
-//! non-zero prefix pages); reads are four raw pages (`0x8B`, pages 0..3). A
+//! zero terminator. Writes are paginated (`0x0B`, 56 bytes a page, all five
+//! pages); reads are four raw pages (`0x8B`, pages 0..3). A
 //! macro is bound to a key through the keymap, slot value `[0x09, mode, index,
 //! 0]`. See `docs/protocol.md`.
 
@@ -180,14 +180,6 @@ impl Macro {
             }
         }
         Macro { repeat, events }
-    }
-
-    /// The number of pages to send: only the non-zero prefix.
-    pub fn pages(blob: &[u8; MACRO_BYTES]) -> u8 {
-        blob.chunks(MACRO_PAGE_DATA)
-            .rposition(|w| w.iter().any(|&b| b != 0))
-            .map(|p| p as u8 + 1)
-            .unwrap_or(1)
     }
 }
 
@@ -420,15 +412,6 @@ mod tests {
         let mut out2 = Vec::new();
         encode_press(&mut out2, 0x04, false, 200);
         assert_eq!(out2, vec![0x04, 0x00, 0xC8, 0x00]);
-    }
-
-    #[test]
-    fn pages_are_the_non_zero_prefix() {
-        let mut blob = [0u8; MACRO_BYTES];
-        blob[0] = 1;
-        assert_eq!(Macro::pages(&blob), 1);
-        blob[60] = 1;
-        assert_eq!(Macro::pages(&blob), 2);
     }
 
     #[test]

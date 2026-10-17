@@ -124,7 +124,7 @@ Offsets are into the 64-byte report before the checksum byte.
 | edge param | `0x08` | `0x88` | same layout as LED, speed **not** inverted |
 | keymap one slot | `0x13` | `0x89` | `[profile, slot]`, value at bytes 8..12; GET is raw pages `[profile, page]` |
 | Fn one slot | `0x15` | `0x90` | `[profile, slot]`, value at bytes 8..12; GET is raw pages |
-| keymap bulk | `0x09` | `0x89` | `[profile, 0xF8, 1, page]` + 56 bytes at 8, 9 pages, commit on page 8 |
+| keymap bulk | `0x09` | `0x89` | SET `[profile, 0xF8, 1, page]` + 56 bytes at 8, 9 pages, commit on page 8; GET is raw pages `[profile, page]` |
 | macro | `0x0B` | `0x8B` | `[slot, 0, 1, page, 0, 0]` + 56 bytes at byte 8, five pages |
 | per-key colour | `0x0C` | `0x8C` | 7 × 56-byte pages of RGB triples in matrix order |
 | factory reset | `0x02` | — | bare opcode; the board needs ~4 s |
@@ -190,8 +190,7 @@ There is **no firmware flashing path** in this project.
 Before any write phase is exercised on hardware, record and verify the reset
 procedure:
 
-1. Preferred: `gamakay keymap reset` / `gamakay settings reset` once
-   implemented (sends `0x02`).
+1. Preferred: `gamakay keymap reset --yes` (sends `0x02`).
 2. Hardware, if the board stops responding to the tool: the LK67 factory
    reset key combo (`Fn` + `Esc` held ~3 s, then release) restores defaults.
    Confirm against the vendor manual before relying on it.

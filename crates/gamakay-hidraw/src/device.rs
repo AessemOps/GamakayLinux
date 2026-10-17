@@ -66,7 +66,12 @@ impl HidrawDevice {
     }
 
     /// A feature-report ioctl, copying through the 65-byte kernel buffer.
-    fn feature_ioctl(&self, request: u64, buf: &mut [u8; FEATURE_BUF_LEN]) -> Result<()> {
+    ///
+    /// Returns the byte count the kernel reports. A control transfer can
+    /// complete short — the device answers with fewer bytes than asked — and a
+    /// short reply that is treated as a full one is a *valid-looking* packet
+    /// built from zero bytes, so the count is returned rather than discarded.
+    fn feature_ioctl(&self, request: u64, buf: &mut [u8; FEATURE_BUF_LEN]) -> Result<usize> {
         // SAFETY: fd is a valid open hidraw descriptor; buf is 65 bytes and the
         // request code was built for exactly that size.
         let rc = unsafe { libc::ioctl(self.fd(), request as libc::c_ulong, buf.as_mut_ptr()) };
@@ -77,6 +82,18 @@ impl HidrawDevice {
                 std::io::Error::last_os_error()
             )));
         }
+        Ok(rc as usize)
+    }
+
+    /// A full-size transfer or an error: a partial one is not a success.
+    fn full_transfer(&self, request: u64, buf: &mut [u8; FEATURE_BUF_LEN]) -> Result<()> {
+        let n = self.feature_ioctl(request, buf)?;
+        if n < FEATURE_BUF_LEN {
+            return Err(Error::Transport(format!(
+                "short feature transfer on {}: {n} of {FEATURE_BUF_LEN} bytes",
+                self.path.display()
+            )));
+        }
         Ok(())
     }
 }
@@ -85,12 +102,12 @@ impl Transport for HidrawDevice {
     fn send_feature(&mut self, buf: &[u8; REPORT_LEN]) -> Result<()> {
         let mut wire = [0u8; FEATURE_BUF_LEN];
         wire[1..].copy_from_slice(buf);
-        self.feature_ioctl(HIDIOCSFEATURE, &mut wire)
+        self.full_transfer(HIDIOCSFEATURE, &mut wire)
     }
 
     fn get_feature(&mut self, buf: &mut [u8; REPORT_LEN]) -> Result<usize> {
         let mut wire = [0u8; FEATURE_BUF_LEN];
-        self.feature_ioctl(HIDIOCGFEATURE, &mut wire)?;
+        self.full_transfer(HIDIOCGFEATURE, &mut wire)?;
         buf.copy_from_slice(&wire[1..]);
         Ok(REPORT_LEN)
     }
