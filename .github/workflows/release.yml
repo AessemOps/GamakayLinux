@@ -290,9 +290,13 @@ jobs:
       - name: Checksums
         run: |-
           cd artifacts
+          # Bare file names on purpose: the release assets are flat, so this has
+          # to work as `sha256sum -c SHA256SUMS` in the directory a user
+          # downloaded them into. The paths here are artifacts/packages/… and
+          # artifacts/arch/…, which are meaningless outside the workflow.
           find . -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \
-            -o -name '*.pkg.tar.zst' \) -exec sha256sum {} + | sed 's|  \./|  |' \
-            | sort -k2 > SHA256SUMS
+            -o -name '*.pkg.tar.zst' \) -exec sha256sum {} + \
+            | sed 's|  \./.*/|  |' | sort -k2 > SHA256SUMS
           cat SHA256SUMS
 
       - name: Attest the artefacts
