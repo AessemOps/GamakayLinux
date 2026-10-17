@@ -111,14 +111,16 @@ jobs:
             bash -euo pipefail -c '
               pacman -Syu --noconfirm --needed base-devel git rust cargo >/dev/null
               # makepkg refuses to run as root; build as an unprivileged user in
-              # a writable copy.
+              # a writable copy. --nodeps because the runtime dependencies are
+              # what the install step below is for: this container has no X, no
+              # GL and no fonts, and the package must still build.
               useradd -m builder
               install -d -o builder -g builder /home/builder/pkg
               install -o builder -g builder -m644 /src/gamakaylinux-*.tar.gz /home/builder/pkg/
               install -o builder -g builder -m644 \
                 /src/gamakaylinux-*/packaging/arch/PKGBUILD \
                 /src/gamakaylinux-*/packaging/arch/gamakaylinux.install /home/builder/pkg/
-              su builder -c "cd ~/pkg && makepkg -f --noconfirm"
+              su builder -c "cd ~/pkg && makepkg -f --noconfirm --nodeps"
               install -m644 /home/builder/pkg/*.pkg.tar.zst /out/
             '
           ls -l out
