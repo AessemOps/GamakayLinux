@@ -50,23 +50,18 @@ impl Program<Message> for Keyboard<'_> {
     fn update(
         &self,
         state: &mut Self::State,
-        event: canvas::Event,
+        event: &canvas::Event,
         bounds: Rectangle,
         cursor: mouse::Cursor,
-    ) -> (canvas::event::Status, Option<Message>) {
-        // Nested rather than a let chain: the declared MSRV is 1.85.
-        if let canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event {
-            if let Some(pos) = cursor.position_in(bounds) {
-                if let Some(k) = hit(pos, bounds) {
-                    *state = Some(k.slot);
-                    return (
-                        canvas::event::Status::Captured,
-                        Some(Message::SelectSlot(k.slot)),
-                    );
-                }
-            }
+    ) -> Option<canvas::Action<Message>> {
+        if let canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event
+            && let Some(pos) = cursor.position_in(bounds)
+            && let Some(k) = hit(pos, bounds)
+        {
+            *state = Some(k.slot);
+            return Some(canvas::Action::publish(Message::SelectSlot(k.slot)).and_capture());
         }
-        (canvas::event::Status::Ignored, None)
+        None
     }
 
     fn draw(
@@ -142,8 +137,8 @@ impl Program<Message> for Keyboard<'_> {
                     font: glyph::font(k.label),
                     color: TEXT,
                     size: iced::Pixels((scale * 0.26).clamp(8.0, 18.0)),
-                    horizontal_alignment: alignment::Horizontal::Center,
-                    vertical_alignment: alignment::Vertical::Top,
+                    align_x: iced::widget::text::Alignment::Center,
+                    align_y: alignment::Vertical::Top,
                     ..Text::default()
                 });
             }
@@ -155,8 +150,6 @@ impl Program<Message> for Keyboard<'_> {
                 .filter(|(slot, _)| *slot == k.slot)
                 .map(|(_, v)| (v.as_str(), PREVIEW));
             let current = self.bindings.get(&k.slot).map(|v| (v.as_str(), BINDING));
-            // Nested rather than a let chain: the declared MSRV is 1.86, and
-            // let chains are not stable there.
             if let Some((text, color)) = preview
                 .or(current)
                 .filter(|(text, _)| glyph::legend(text) != glyph::legend(k.label))
@@ -169,8 +162,8 @@ impl Program<Message> for Keyboard<'_> {
                         font: glyph::font(text),
                         color,
                         size: iced::Pixels((scale * 0.2).clamp(7.0, 13.0)),
-                        horizontal_alignment: alignment::Horizontal::Center,
-                        vertical_alignment: alignment::Vertical::Top,
+                        align_x: iced::widget::text::Alignment::Center,
+                        align_y: alignment::Vertical::Top,
                         ..Text::default()
                     });
                 }

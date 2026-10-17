@@ -1,18 +1,31 @@
-# `cargo audit` runs in CI (the `audit` job in .github/workflows/ci.yml).
+# `cargo audit` runs in CI (the `advisories` job in .github/workflows/ci.yml).
 #
-# The ignores below are all transitive through iced 0.13 and cannot be fixed
-# here: `cargo update` cannot move them, because iced_glyphon 0.6 pins
-# lru = "0.12". They clear with the iced 0.14 upgrade (which moves to lru 0.16
-# through cryoglyph, at the cost of raising the MSRV from 1.85 to 1.88).
-# Each is a warning, not a vulnerability: no known exploitable path.
+# It exits non-zero only for vulnerabilities; everything listed here is a
+# warning, so this file is documentation of what is known and accepted rather
+# than a gate. iced 0.14 is why the list looks the way it does:
+#
+#   cleared by the upgrade: lru's RUSTSEC-2026-0002 (the 0.12 `IterMut`
+#   unsoundness), `instant`, `rustybuzz`, and the duplicate `ttf-parser` majors
+#   (0.20 and 0.21 are gone; only 0.25 remains).
+#   introduced by the upgrade: the `zbus` trio, which iced 0.14 pulls for Linux
+#   theme detection.
+#   still open: `lru` RUSTSEC-2026-0253 and the two unmaintained text crates.
+#
+# Nothing to do here until upstream moves; each entry says what would clear it.
 [advisories]
 ignore = [
-    # Unsound, but only via LruCache::IterMut / pop, used by iced's glyph atlas.
-    "RUSTSEC-2026-0002",
+    # Unsound: no panic safety in LruCache::pop(), used by the GUI's glyph
+    # atlas. Patched only in lru >= 0.18.2, and iced's cryoglyph pins ^0.16, so
+    # `cargo update` cannot reach it — it needs an upstream bump. The reported
+    # use-after-free needs an *unwinding* panic; the release profile sets
+    # panic = "abort" (Cargo.toml), so a shipped build aborts instead of
+    # continuing with a dangling reference.
     "RUSTSEC-2026-0253",
-    # Unmaintained, not unsound.
-    "RUSTSEC-2024-0384", # instant
+    # Unmaintained, not unsound. Clears when the iced text stack drops it.
     "RUSTSEC-2024-0436", # paste
-    "RUSTSEC-2026-0206", # rustybuzz
     "RUSTSEC-2026-0192", # ttf-parser
+    # Unmaintained, not unsound: iced 0.14's Linux theme detection uses zbus.
+    "RUSTSEC-2026-0370", # zvariant
+    "RUSTSEC-2026-0371", # zbus_names
+    "RUSTSEC-2026-0372", # zvariant_derive
 ]

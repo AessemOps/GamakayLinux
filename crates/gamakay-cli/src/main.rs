@@ -177,10 +177,10 @@ fn cmd_info(cli: &Cli) -> Result<()> {
         );
     }
 
-    if let Ok(rev) = session.revision() {
-        if let Some(s) = format_revision(rev) {
-            println!("firmware:    {s}");
-        }
+    if let Ok(rev) = session.revision()
+        && let Some(s) = format_revision(rev)
+    {
+        println!("firmware:    {s}");
     }
     if let Ok(profile) = session.profile() {
         println!("profile:     {profile}");

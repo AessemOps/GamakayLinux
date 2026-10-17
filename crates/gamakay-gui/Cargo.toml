@@ -15,7 +15,7 @@ path = "src/main.rs"
 [dependencies]
 gamakay-core.workspace = true
 gamakay-hidraw.workspace = true
-iced = { version = "0.13", features = ["canvas", "smol"] }
+iced = { version = "0.14", features = ["canvas", "smol"] }
 
 [dev-dependencies]
 # Check that the bundled font really has every glyph we point at it.

@@ -334,10 +334,10 @@ impl Worker {
     fn read_macros(&mut self) {
         let mut out = Vec::new();
         for slot in 0..MACRO_SLOTS {
-            if let Some(m) = self.with_session(|s| s.read_macro(slot)) {
-                if !m.is_empty() {
-                    out.push((slot, describe(&m)));
-                }
+            if let Some(m) = self.with_session(|s| s.read_macro(slot))
+                && !m.is_empty()
+            {
+                out.push((slot, describe(&m)));
             }
         }
         self.macros = out;
