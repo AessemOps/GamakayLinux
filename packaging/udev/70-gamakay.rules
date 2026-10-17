@@ -11,13 +11,6 @@
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3151", ATTRS{idProduct}=="4003", TAG+="uaccess"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0461", ATTRS{idProduct}=="4002", TAG+="uaccess"
 
-# Bluetooth HOGP is surfaced through uhid under the adapter's USB ids, so match
-# the HID name instead. Wired and Bluetooth share the same product name.
-SUBSYSTEM=="hidraw", ATTRS{name}=="*GamaKay LK67 Keyboard*", TAG+="uaccess"
-
-# The 2.4 GHz receiver ("Areson Technology Corp / RONGYUAN 2.4G Wireless
-# Device"). It reports its own product name, so the name match below does not
-# catch it. No node of it declares a feature report, so it carries no settings
-# channel; it is granted access so the receiver can be opened and named, not to
-# be written to.
-SUBSYSTEM=="hidraw", ATTRS{idVendor}=="25a7", ATTRS{idProduct}=="fa17", TAG+="uaccess"
+# 2.4 GHz and Bluetooth are out of scope: the receiver declares no HID feature
+# report, so the protocol cannot be addressed over it, and Bluetooth was never
+# captured. No rule is needed for either. See docs/protocol.md.

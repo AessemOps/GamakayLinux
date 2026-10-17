@@ -23,7 +23,7 @@ use gamakay_hidraw::{HidrawDevice, HidrawInfo};
 #[command(
     name = "gamakay",
     version,
-    about = "Configure a GamaKay LK67 from Linux (USB, 2.4 GHz, Bluetooth).",
+    about = "Configure a GamaKay LK67 from Linux over its USB cable.",
     long_about = None,
 )]
 struct Cli {

@@ -12,17 +12,16 @@ This file is the source of truth for the command allow-list in
 
 ## Transport
 
-The keyboard is driven over Linux **hidraw**. No libusb, no libudev: the
-kernel's `hid-generic` driver stays bound, so the board keeps typing while we
-configure it, and the same path covers USB, the 2.4 GHz dongle and Bluetooth
-HOGP (surfaced through `uhid`).
+The keyboard is driven over Linux **hidraw** on its **USB cable**. No libusb, no
+libudev: the kernel's `hid-generic` driver stays bound, so the board keeps typing
+while we configure it.
 
 | | |
 |---|---|
 | Reports | 64-byte HID feature reports, report id 0, both directions |
 | hidraw buffer | 65 bytes: one report-number byte (0) then the 64 data bytes |
 | ioctls | `HIDIOCSFEATURE(65)` = `0xC0414806`, `HIDIOCGFEATURE(65)` = `0xC0414807` |
-| Collection | wireless boards expose a `0xFFFF` usage-page collection; the LK67 answers on its **keyboard** collection (usage page `0x0001`, usage `0x0006`) — the same exception the vendor driver carries **[HW]** |
+| Collection | the LK67 answers on its **keyboard** collection (usage page `0x0001`, usage `0x0006`) — the same exception the vendor driver carries **[HW]** |
 | Reply | a GET reply echoes the opcode in byte 0, except bulk page reads (keymatrix, Fn, macro, userpic), which return raw page bytes **[REF]** |
 
 ### The LK67 on USB
@@ -35,18 +34,34 @@ HOGP (surfaced through `uhid`).
 | `hidraw1` | 1.1 | consumer/system/keyboard report ids, a 3-byte vendor input on `0xFFFF:0x0001`, **no** feature report | not used |
 
 So the settings node is picked by "carries a ≥64-byte feature report",
-preferring a known USB id. `gamakay list` shows which node that is.
+preferring a known USB id. `gamakay list` shows which node that is. Selection
+therefore looks for "carries the settings report", which on a machine with other
+HID hardware picks the wrong device — this machine's Corsair mouse carries one
+too — so front-ends gate on the device's identity
+(`gamakay_core::device::is_gamakay`) before writing anything.
 
-The 2.4 GHz receiver is **`25a7:fa17`** ("Areson Technology Corp / RONGYUAN 2.4G
-Wireless Device"), three HID interfaces: a mouse collection, a vendor collection
-(`0xFF00:0x0E`) whose only writable channel is **Report ID `0xBA`, an output and
-an input report of 31 bytes each**, and a boot keyboard. **No interface of it
-declares a feature report**, so the protocol above cannot be addressed over it:
-a 64-byte feature report is what every selection path looks for, and 64 bytes do
-not fit the 31-byte channel either. The Bluetooth HID descriptor is still an open
-item. Selection therefore falls back to "carries the settings report" — which on
-a machine with other HID hardware picks the wrong device, so front-ends gate on
-the device's identity (`gamakay_core::device::is_gamakay`) before writing.
+### Scope: USB cable
+
+**2.4 GHz and Bluetooth are dropped.** Investigated 2026-10-17 and closed:
+
+- The receiver is **`25a7:fa17`** ("Areson Technology Corp / RONGYUAN 2.4G
+  Wireless Device"), the board's own dongle, three HID interfaces: a mouse
+  collection, a vendor collection (`0xFF00:0x0E`) whose only writable channel is
+  **Report ID `0xBA`, an output and an input report of 31 bytes each**, and a boot
+  keyboard. **No interface declares a feature report**, so the protocol above
+  cannot be addressed over it — and 64 bytes do not fit the 31-byte channel
+  either.
+- GAMAKAY's own registry treats a dongle as a separate device (`type:"dongle"`,
+  usage page `0xFFFF` usage `2`) carrying a protobuf status message
+  (`isOnline`/`battery` for a keyboard and a mouse); its configuration still goes
+  over feature reports. Its `dongle_common` ids all sit under GAMAKAY's vendor id
+  `0x3151`, not under `0x25a7`, so this receiver is likely a generic Areson part
+  its own app does not configure either.
+- Bluetooth was never captured.
+
+Nothing above is implemented, and no udev rule grants either access. Re-opening
+this means starting from the receiver's `0xBA` channel with a capture of the
+vendor tooling driving it.
 
 ## Checksums
 
@@ -183,26 +198,20 @@ procedure:
 3. After a bad write the board normally keeps typing; a stalled control
    endpoint recovers on USB re-enumeration (unplug/replug).
 
-## Transport support matrix
+## Feature matrix
 
-Cable is the only verified column. The 2.4 GHz column is what the receiver's own
-descriptors show: it offers no feature report, so the feature-report protocol
-below is not addressable over it — see "The LK67 on USB" for the detail. The
-Bluetooth column is still open. Unsupported features are disabled rather than
-guessed.
+USB cable only, verified on the test unit. Features no supported transport
+carries are disabled rather than guessed; see "Scope: USB cable" for what the
+wireless transports would have needed.
 
-| feature | USB cable | 2.4 GHz (\*) | Bluetooth |
-|---|---|---|---|
-| settings channel | 64-byte feature report, report id 0 | none declared; only the 31-byte `0xBA` input/output pair | ? |
-| identify / revision | yes **[HW]** | no channel | ? |
-| info / options / debounce | yes **[HW]** | no channel | ? |
-| lighting | yes **[HW]** | no channel | ? |
-| keymap (base + Fn) | yes **[HW]** | no channel | ? |
-| macros | yes **[HW]** | no channel | ? |
-| battery | — (no command; receiver status only) | receiver's own status channel (GAMAKAY models it as a protobuf `dangleDev` with `isOnline`/`battery`), not yet framed here | ? |
-
-(\*) `25a7:fa17`. Whether its descriptor changes once the keyboard is paired is
-untested; if it does, this row is what to re-read.
+| feature | USB cable |
+|---|---|
+| identify / revision | yes **[HW]** |
+| info / options / debounce | yes **[HW]** |
+| lighting | yes **[HW]** |
+| keymap (base + Fn) | yes **[HW]** |
+| macros | yes **[HW]** |
+| battery | — (no command over the cable) |
 
 ## Phase 1 hardware findings (LK67, USB cable)
 

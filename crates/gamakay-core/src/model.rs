@@ -3,16 +3,18 @@
 
 use crate::device::DeviceRecord;
 
-/// How the board is attached. Derived from the USB/uhid node, not the
-/// protocol: the handshake does not report it.
+/// How the board is attached. Derived from the USB node, not the protocol: the
+/// handshake does not report it.
+///
+/// **Scope: the USB cable only.** 2.4 GHz and Bluetooth were investigated and
+/// dropped — the receiver declares no HID feature report, so the protocol cannot
+/// be addressed over it, and Bluetooth was never captured. See
+/// `docs/protocol.md`, "Scope: USB cable".
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Connection {
-    /// Wired USB (the LK67's `0461:4002`).
+    /// Wired USB (the LK67's `3151:4003`, `0461:4002` before the 2026-10 update).
     Usb,
-    /// The 2.4 GHz receiver (VID/PID unknown for the LK67; not yet tested).
-    Receiver,
-    /// Bluetooth HOGP, surfaced as hidraw through `uhid`.
-    Bluetooth,
+    /// A node that is not on a USB bus.
     Unknown,
 }
 
@@ -20,8 +22,6 @@ impl Connection {
     pub const fn label(self) -> &'static str {
         match self {
             Connection::Usb => "USB",
-            Connection::Receiver => "2.4 GHz",
-            Connection::Bluetooth => "Bluetooth",
             Connection::Unknown => "unknown",
         }
     }

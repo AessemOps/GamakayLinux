@@ -1,9 +1,9 @@
 # GamakayLinux
 
 A Linux-native replacement for the GamaKay keyboard driver app, in Rust, for
-the **GamaKay LK67**. It configures the keyboard over USB, the 2.4 GHz dongle
-and Bluetooth with no resident process: every setting is written to the
-keyboard's own memory and the program exits.
+the **GamaKay LK67**. It configures the keyboard over its **USB cable**, with no
+resident process: every setting is written to the keyboard's own memory and the
+program exits.
 
 > Status: **Phase 5** — `list` / `info`, lighting, the base and Fn keymaps,
 > macros, and an iced GUI (`gamakay-gui`) are implemented and verified on
@@ -147,10 +147,12 @@ membership needed.
 
 ## Transport support
 
-Cable is the only verified transport so far. Wireless support is limited to
-what the firmware accepts, verified per transport in Phase 0; features a
-transport does not carry are disabled rather than guessed. See the matrix in
-`docs/protocol.md`.
+**USB cable only.** 2.4 GHz and Bluetooth were investigated and dropped: the
+receiver (`25a7:fa17`, "RONGYUAN 2.4G Wireless Device") declares no HID feature
+report on any of its three interfaces, so the protocol — 64-byte feature reports,
+report id 0 — cannot be addressed over it, and Bluetooth was never captured. The
+transport matrix in `docs/protocol.md` records what was measured; features a
+transport does not carry are disabled rather than guessed.
 
 ## License
 

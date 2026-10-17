@@ -31,25 +31,21 @@ impl HidrawInfo {
         self.feature_bytes >= 64
     }
 
-    /// Whether this node belongs to a GamaKay board (or its receiver) rather
-    /// than to some other HID device that merely looks similar. Front-ends must
-    /// not write to anything this rejects: on this machine the Corsair mouse
-    /// also carries a 64-byte feature report, so "has a settings report" alone
-    /// picks the wrong device the moment the keyboard is away.
+    /// Whether this node belongs to a board this project drives rather than to
+    /// some other HID device that merely looks similar. Front-ends must not
+    /// write to anything this rejects: on this machine the Corsair mouse also
+    /// carries a 64-byte feature report, so "has a settings report" alone picks
+    /// the wrong device the moment the keyboard is away.
     pub fn is_gamakay(&self) -> bool {
-        gamakay_core::device::is_gamakay(
-            self.vendor_id,
-            self.product_id,
-            self.connection == Connection::Bluetooth,
-        )
+        gamakay_core::device::is_gamakay(self.vendor_id, self.product_id)
     }
 }
 
-/// Map a Linux input bus id to a connection label.
+/// Map a Linux input bus id to a connection label. Only USB is supported; a
+/// Bluetooth HOGP node arrives on bus `0x05` and is reported as `Unknown`.
 pub fn connection_of(bus: u16) -> Connection {
     match bus {
         0x03 => Connection::Usb,
-        0x05 => Connection::Bluetooth,
         _ => Connection::Unknown,
     }
 }
@@ -104,20 +100,13 @@ fn read_node(class_link: &Path) -> Option<HidrawInfo> {
     let name = parse_hid_name(&uevent).unwrap_or_default();
     let desc = fs::read(device.join("report_descriptor")).unwrap_or_default();
     let summary = parse_descriptor(&desc);
-    // The receiver is a USB device like any other, so the bus cannot tell it
-    // apart: its ids do.
-    let connection = if gamakay_core::device::is_lk67_receiver(vendor_id, product_id) {
-        Connection::Receiver
-    } else {
-        connection_of(bus)
-    };
     Some(HidrawInfo {
         path: PathBuf::from("/dev").join(class_link.file_name()?),
         name,
         vendor_id,
         product_id,
         bus,
-        connection,
+        connection: connection_of(bus),
         feature_bytes: summary.feature_bytes,
         usage_page: summary.app_usage_page,
         usage: summary.app_usage,
@@ -264,6 +253,9 @@ mod tests {
     #[test]
     fn bus_maps_to_connection() {
         assert_eq!(connection_of(0x03), Connection::Usb);
-        assert_eq!(connection_of(0x05), Connection::Bluetooth);
+        // Bluetooth HOGP arrives on bus 0x05 and is out of scope: it must be
+        // reported as unknown rather than as something we claim to support.
+        assert_eq!(connection_of(0x05), Connection::Unknown);
+        assert_eq!(connection_of(0x00), Connection::Unknown);
     }
 }
