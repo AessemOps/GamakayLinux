@@ -135,13 +135,7 @@ jobs:
               install -o builder -g builder -m644 /src/gamakaylinux-*.tar.gz /home/builder/pkg/
               # The PKGBUILD and its install scriptlet come out of the tarball
               # we just built, so they cannot drift from the source being built.
-              su builder -c '
-                cd ~/pkg
-                tar xzf gamakaylinux-*.tar.gz --wildcards "gamakaylinux-*/packaging/arch/*"
-                install -m644 gamakaylinux-*/packaging/arch/PKGBUILD \
-                  gamakaylinux-*/packaging/arch/gamakaylinux.install .
-                makepkg -f --noconfirm --nodeps
-              '
+              su builder -c "cd ~/pkg && tar xzf gamakaylinux-*.tar.gz --wildcards 'gamakaylinux-*/packaging/arch/*' && install -m644 gamakaylinux-*/packaging/arch/PKGBUILD gamakaylinux-*/packaging/arch/gamakaylinux.install . && makepkg -f --noconfirm --nodeps"
               install -m644 /home/builder/pkg/*.pkg.tar.zst /out/
             '
           ls -l out
