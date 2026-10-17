@@ -3,24 +3,9 @@
 
 use iced::Color;
 
-/// Parse `#rrggbb` / `rrggbb`.
-pub fn parse_hex(s: &str) -> Option<[u8; 3]> {
-    let t = s.trim().trim_start_matches('#');
-    // The slices below are taken at byte offsets, so reject anything that is
-    // not six ASCII digits first: a six-*byte* non-ASCII string (say "€€")
-    // would otherwise panic on a char boundary, and this parses a text field
-    // as the user types.
-    if t.len() != 6 || !t.is_ascii() {
-        return None;
-    }
-    let b = |i: usize| u8::from_str_radix(&t[i..i + 2], 16).ok();
-    Some([b(0)?, b(2)?, b(4)?])
-}
+// One implementation, in core: this parses a text field as the user types.
+pub use gamakay_core::color::{parse_hex, to_hex};
 
-/// Format as `#rrggbb`.
-pub fn to_hex(rgb: [u8; 3]) -> String {
-    format!("#{:02x}{:02x}{:02x}", rgb[0], rgb[1], rgb[2])
-}
 /// `h` in degrees, `s` and `v` in 0..=1.
 pub fn hsv_to_rgb(h: f32, s: f32, v: f32) -> Color {
     let h = h.rem_euclid(360.0) / 60.0;
@@ -57,28 +42,4 @@ pub fn rgb_to_hs(rgb: [u8; 3]) -> (f32, f32) {
     };
     let s = if max == 0.0 { 0.0 } else { d / max };
     (h.rem_euclid(360.0), s)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn hex_round_trips() {
-        assert_eq!(parse_hex("#ff0000"), Some([0xff, 0x00, 0x00]));
-        assert_eq!(parse_hex(" 00ff80 "), Some([0x00, 0xff, 0x80]));
-        assert_eq!(to_hex([0x00, 0xff, 0x80]), "#00ff80");
-        assert_eq!(parse_hex("#ff00"), None);
-        assert_eq!(parse_hex("#gggggg"), None);
-    }
-
-    /// Six *bytes* of non-ASCII must be refused, not panic: the parser slices
-    /// at byte offsets and it runs on a text field as the user types, so a
-    /// panic here aborts the whole application.
-    #[test]
-    fn non_ascii_is_refused() {
-        assert_eq!(parse_hex("€€"), None); // 3 + 3 bytes
-        assert_eq!(parse_hex("ééé"), None); // 2 + 2 + 2 bytes
-        assert_eq!(parse_hex("#ééa"), None); // 5 bytes
-    }
 }

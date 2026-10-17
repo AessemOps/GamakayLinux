@@ -2,7 +2,7 @@
 //! Transport abstraction and the transport-agnostic conversation.
 //!
 //! `Transport` is the four primitives a backend must provide (the plan's
-//! `send_feature`/`get_feature`/`write`/`read_timeout`). `Session` layers the
+//! `send_feature`/`get_feature`). `Session` layers the
 //! protocol on top: it builds packets through the [`Guard`] and retries reads
 //! until the opcode echoes back. A `MockTransport` replays fixtures so the
 //! conversation is tested without hardware.
@@ -28,10 +28,6 @@ pub trait Transport {
     fn send_feature(&mut self, buf: &[u8; REPORT_LEN]) -> Result<()>;
     /// Read one 64-byte feature report. Returns the byte count filled.
     fn get_feature(&mut self, buf: &mut [u8; REPORT_LEN]) -> Result<usize>;
-    /// Write an output report / raw bytes. Unused by the app-mode protocol.
-    fn write(&mut self, buf: &[u8]) -> Result<usize>;
-    /// Read with a timeout. Unused by the app-mode protocol.
-    fn read_timeout(&mut self, buf: &mut [u8], timeout_ms: i32) -> Result<usize>;
     /// A short human description of the node, for diagnostics.
     fn describe(&self) -> String {
         "transport".to_string()
@@ -89,6 +85,12 @@ impl<'a> Session<'a> {
 
     pub fn guard(&self) -> Guard {
         self.guard
+    }
+
+    /// Whether writes are suppressed (see [`Guard::dry_run`]). A caller that
+    /// must not *read* state a withheld write would have changed needs this.
+    pub fn is_dry_run(&self) -> bool {
+        self.guard.dry_run
     }
 
     /// Write packets a dry run withheld from the wire.
@@ -248,14 +250,6 @@ impl Transport for MockTransport {
             }
             None => Err(Error::NoReply { opcode: op }),
         }
-    }
-
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        Ok(buf.len())
-    }
-
-    fn read_timeout(&mut self, _buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
-        Err(Error::Transport("mock has no timed read".into()))
     }
 
     fn describe(&self) -> String {

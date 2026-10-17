@@ -8,8 +8,10 @@
 # Wired USB. The LK67 enumerates two interfaces; this matches the settings one
 # (usage page 1 / usage 6, the 64-byte vendor feature report). 3151:4003 is the
 # current firmware; 0461:4002 is the pre-2026-10 id.
-SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3151", ATTRS{idProduct}=="4003", TAG+="uaccess"
-SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0461", ATTRS{idProduct}=="4002", TAG+="uaccess"
+# The settings collection is interface 0; matching it keeps the grant to the
+# node the tool talks to rather than every hidraw interface of the board.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3151", ATTRS{idProduct}=="4003", ATTRS{bInterfaceNumber}=="00", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0461", ATTRS{idProduct}=="4002", ATTRS{bInterfaceNumber}=="00", TAG+="uaccess"
 
 # 2.4 GHz and Bluetooth are out of scope: the receiver declares no HID feature
 # report, so the protocol cannot be addressed over it, and Bluetooth was never

@@ -74,6 +74,51 @@ container of its own distribution and run in CI before a release is published.
 - The declared MSRV (1.85) could not compile the code (let chains); the two
   sites are rewritten so the declaration is true.
 
+**Second audit (before the tag).** A second full pass over the released code —
+recent-fix regressions, write safety, code quality and supply chain — found four
+things that would have shipped. Fixed:
+
+- **`keymap set --profile N` wrote to the wrong profile.** The keymap commands
+  address the *active* profile, so selecting one is a real write; the selection
+  was restored *before* the layer was written back, which sent the whole layer —
+  including the edit — to the profile the user was already on. The
+  read-modify-write now happens inside the activation. Under `--dry-run` the
+  select is withheld, so the command says which profile it actually read instead
+  of claiming the one it could not select.
+- **`macro:<index>` was unbounded.** `--to macro:200` wrote a binding to a slot
+  the board does not have; the changelog claimed indexes were range-checked.
+  They are now, with a test that fails if the bound is dropped again.
+- **The Arch package could not build from the real tag tarball.** GitHub extracts
+  a tag to `<repo>-<version>` (`GamakayLinux-0.1.0`), not `$pkgname-$pkgver`, so
+  `cd "$pkgname-$pkgver"` failed. CI renamed the directory, which hid it; CI now
+  produces the real layout, and the package is built from it here.
+- **The README documented the tool as refusing the firmware-owned Fn slots.** It
+  does not: the firmware ignores writes to them, and the GUI only paints them
+  red. Two other README claims were wrong too (`--rgb` is `--color`; the key
+  picker has ~115 keys, not ~200).
+
+Also fixed: two silent `profile().unwrap_or(0)` fallbacks that would have read
+and written profile 0 when the active profile could not be read; a lost identify
+reply used to disable every GUI write until a manual reconnect, and an
+unconfirmed profile switch used to leave the GUI showing the old keymap under
+the new profile's highlight; the macro list is no longer cached across a
+disconnect; the GUI now enforces the same 126-slot write limit as the CLI; an
+edge-light speed and an out-of-range option nibble are refused rather than
+truncated; parse errors in the macro step DSL no longer report themselves as
+transport failures; `apply` and the profile loader reject unknown TOML keys and
+confine profile *names* to the profile directory; the `setprobe` example is
+read-only unless `SETPROBE_ALLOW_WRITE` is set; and the udev rule now matches
+only the settings interface rather than every interface the board exposes.
+
+Supply chain: every GitHub action is pinned to a commit SHA and the two
+container images to a digest; the AppImage *runtime* is downloaded and verified
+against a pinned digest instead of being fetched unverified at build time;
+releases carry a build-provenance attestation as well as `SHA256SUMS`; the
+version guard also checks the AppStream `<release version>`; `cargo audit` and a
+declared-Minimum-Rust-Version check run in CI, with Dependabot for crates and
+actions. The declared MSRV was corrected from 1.85 to **1.86** — the Wayland
+stack requires it.
+
 **Not in this release:** 2.4 GHz and Bluetooth. They were investigated and
 dropped — the receiver declares no HID feature report, so this protocol cannot
 be addressed over it. The measurements are in `docs/protocol.md`.

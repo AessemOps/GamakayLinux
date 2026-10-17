@@ -126,7 +126,9 @@ pub fn run(cli: &Cli, profile_arg: &str) -> Result<()> {
         }
     }
     if let Some(map) = &profile.keymap {
-        let profile_idx = s.profile().unwrap_or(0);
+        // Reading (and then writing) profile 0 because the active profile could
+        // not be read would edit a layer the user never chose.
+        let profile_idx = s.profile().context("reading the active profile")?;
         let mut layer = s.read_layer(profile_idx, false)?;
         for (key, to) in map {
             let slot = match key.trim().parse::<usize>() {
@@ -158,22 +160,37 @@ pub fn run(cli: &Cli, profile_arg: &str) -> Result<()> {
     Ok(())
 }
 
+/// Resolve a profile argument.
+///
+/// A *name* is looked up only inside `~/.config/gamakay/profiles`, and the
+/// looked-up path is checked to still be under it, so a name containing `..`
+/// cannot walk out of the directory. A path (`./x.toml`, `/tmp/x.toml`) is
+/// taken as given: that is an explicit choice, and the file can only drive the
+/// documented settings through the guard.
 fn resolve_path(arg: &str) -> Result<PathBuf> {
     let direct = Path::new(arg);
-    if direct.is_file() {
-        return Ok(direct.to_path_buf());
+    let looks_like_a_path = arg.contains('/') || arg.starts_with('~') || arg.starts_with('.');
+    if looks_like_a_path || direct.extension().is_some() {
+        if direct.is_file() {
+            return Ok(direct.to_path_buf());
+        }
+        bail!("no profile file at {arg:?}");
     }
+
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
         .ok_or_else(|| anyhow::anyhow!("cannot find a config directory (no HOME)"))?;
-    let candidate = base.join("gamakay/profiles").join(format!("{arg}.toml"));
-    if candidate.is_file() {
+    let dir = base.join("gamakay/profiles");
+    let candidate = dir.join(format!("{arg}.toml"));
+    // Canonicalise both: a symlink inside the directory must not lead out of it.
+    let under_dir = dir
+        .canonicalize()
+        .ok()
+        .zip(candidate.canonicalize().ok())
+        .is_some_and(|(d, c)| c.starts_with(&d));
+    if candidate.is_file() && under_dir {
         return Ok(candidate);
     }
-    bail!(
-        "no profile at {arg:?} (looked for {} and {})",
-        direct.display(),
-        candidate.display()
-    )
+    bail!("no profile named {arg:?} in {}", dir.display())
 }

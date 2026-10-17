@@ -25,7 +25,7 @@ keyboard's own memory over USB, with a GUI and a scriptable CLI.
 | | |
 |---|---|
 | **Lighting** | Onboard modes with brightness, speed and direction, rainbow, and a colour picker with a live preview of the board. |
-| **Keymap** | Remap any key on the base **and Fn** layers, across the board's **8 profiles**. Remap by pressing a key on the keyboard, or pick one from a VIA-style list of ~200 keys — media, modifiers, macros, profiles. |
+| **Keymap** | Remap any key on the base **and Fn** layers, across the board's **8 profiles**. Remap by pressing a key on the keyboard, or pick one from a VIA-style list of ~115 keys — media, modifiers, macros, profiles. |
 | **Macros** | 50 onboard slots with a **recorder**: press Record, type the macro, press Stop, save it to a slot. Delays are captured, so the take keeps your typing rhythm. A CLI step DSL covers scripted cases. |
 | **Device info** | Firmware, active profile, the options the firmware exposes. |
 | **GUI + CLI** | An iced app for interactive work; a `gamakay` command for scripts, profiles and CI. |
@@ -62,7 +62,7 @@ inside the archive), or run the tools as root.
 ```bash
 gamakay list                     # every HID node, with the board marked
 gamakay info                     # model, firmware, active profile
-gamakay light set --rgb ff00aa --brightness 3 --mode wave
+gamakay light set --color ff00aa --brightness 3 --mode wave
 gamakay keymap set --slot 9 --to Esc        # by slot
 gamakay keymap get --fn                     # the Fn layer
 gamakay keymap reset --yes                  # back to the board's defaults
@@ -121,8 +121,9 @@ the tool identifies the board with a handshake, not by VID/PID — and
   bootloader opcodes. No firmware-flashing path exists in the code.
 - Reads and writes are length- and checksum-checked; a short transfer from the
   board is an error, not zero-filled data.
-- The board's firmware-owned Fn keys (the red ones in the preview) cannot be
-  remapped: the GUI marks them and the tool refuses those slots.
+- The board's firmware-owned Fn keys are painted red in the preview. The
+  firmware ignores writes to those slots rather than the protocol refusing them,
+  so remapping one has no effect.
 - If a board stops answering, `gamakay keymap reset --yes` sends the factory
   reset (`0x02`); the LK67 also resets with `Fn`+`Esc` held for about three
   seconds.
@@ -130,7 +131,8 @@ the tool identifies the board with a handshake, not by VID/PID — and
 ## Development
 
 ```bash
-make check     # fmt --check, clippy -D warnings, the test suite
+make lint      # fmt --check, clippy -D warnings
+make check     # the two above, then the test suite (it formats first)
 make release   # LTO, stripped, panic=abort
 make packages  # deb + rpm + AppImage into dist/
 make package-arch

@@ -11,6 +11,7 @@
 //! real device (hidraw) and against recorded fixtures ([`MockTransport`]).
 
 pub mod cmd;
+pub mod color;
 pub mod device;
 pub mod error;
 pub mod guard;
@@ -30,6 +31,6 @@ pub use guard::Guard;
 pub use keymap::{Keymap, Slot, SlotValue};
 pub use light::{EdgeMode, FlagsPair, LK67_FLAGS, LedParam, Mode};
 pub use macros::{Macro, MacroEvent};
-pub use model::{Connection, DeviceInfo};
+pub use model::Connection;
 pub use packet::{Checksum, REPORT_LEN, apply_checksum};
 pub use transport::{MockTransport, Session, Transport};
