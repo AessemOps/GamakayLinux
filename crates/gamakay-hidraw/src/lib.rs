@@ -8,8 +8,9 @@
 //!
 //! Enumeration walks `/sys/class/hidraw/*/device/uevent` for the USB ids and
 //! parses the report descriptor to find the node that carries the 64-byte
-//! vendor feature report. The same path covers cables, the 2.4 GHz dongle
-//! (another USB HID node) and Bluetooth HOGP (surfaced through `uhid`).
+//! vendor feature report. Scope is the USB cable: the 2.4 GHz receiver declares
+//! no feature report and Bluetooth was never captured, so neither is supported
+//! (see `docs/protocol.md`, "Scope: USB cable").
 
 mod device;
 mod enumerate;

@@ -54,9 +54,6 @@ sudo modprobe usbmon
 sudo tshark -i usbmon3 -Y 'usb.urb_type=="S"' -w cap.pcapng
 ```
 
-For Bluetooth, capture the passed-through adapter and decode the HCI/ATT
-writes.
-
 Save only the decoded packets that matter as `tests/fixtures/*.txt` and the
 board identity (`0x8F` id) with them.
 

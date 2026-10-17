@@ -98,6 +98,14 @@ pub const LK67: DeviceRecord = DeviceRecord {
 /// these too, so a pre-update board is still recognised.
 pub const LK67_LEGACY_USB: &[(u16, u16)] = &[(0x0461, 0x4002)];
 
+/// Whether a node identified by these ids is a board this project drives, as
+/// opposed to some other HID device that merely looks similar. Several devices
+/// carry a 64-byte feature report (this machine's Corsair mouse does), so
+/// front-ends gate every write on this rather than on the report size.
+pub fn is_gamakay(vendor_id: u16, product_id: u16) -> bool {
+    !by_usb(vendor_id, product_id).is_empty()
+}
+
 /// A known sibling that shares the LK67's USB ids but is a different board.
 /// Present so a mis-identified handshake is caught rather than assumed.
 pub const YZ68: DeviceRecord = DeviceRecord {
@@ -174,5 +182,17 @@ mod tests {
         // The pre-update id still resolves to the LK67 (and, in decimal, is
         // also the YZ68's id).
         assert!(by_usb(0x0461, 0x4002).iter().any(|d| d.id == LK67.id));
+    }
+
+    /// The gate that stops a front-end writing to whatever HID device happened
+    /// to be found: our boards pass, a stranger's HID device — the Corsair mouse
+    /// on this machine, which also carries a 64-byte feature report — does not.
+    #[test]
+    fn only_our_boards_are_accepted() {
+        assert!(is_gamakay(0x3151, 0x4003)); // wired, current firmware
+        assert!(is_gamakay(0x0461, 0x4002)); // wired, pre-update
+        assert!(!is_gamakay(0x1b1c, 0x1b2e)); // Corsair mouse, USB
+        assert!(!is_gamakay(0x25a7, 0xfa17)); // the 2.4 GHz receiver (dropped)
+        assert!(!is_gamakay(0x1234, 0x5678)); // anything else
     }
 }

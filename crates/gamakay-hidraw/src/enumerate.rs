@@ -30,13 +30,22 @@ impl HidrawInfo {
     pub fn has_settings_report(&self) -> bool {
         self.feature_bytes >= 64
     }
+
+    /// Whether this node belongs to a board this project drives rather than to
+    /// some other HID device that merely looks similar. Front-ends must not
+    /// write to anything this rejects: on this machine the Corsair mouse also
+    /// carries a 64-byte feature report, so "has a settings report" alone picks
+    /// the wrong device the moment the keyboard is away.
+    pub fn is_gamakay(&self) -> bool {
+        gamakay_core::device::is_gamakay(self.vendor_id, self.product_id)
+    }
 }
 
-/// Map a Linux input bus id to a connection label.
+/// Map a Linux input bus id to a connection label. Only USB is supported; a
+/// Bluetooth HOGP node arrives on bus `0x05` and is reported as `Unknown`.
 pub fn connection_of(bus: u16) -> Connection {
     match bus {
         0x03 => Connection::Usb,
-        0x05 => Connection::Bluetooth,
         _ => Connection::Unknown,
     }
 }
@@ -244,6 +253,9 @@ mod tests {
     #[test]
     fn bus_maps_to_connection() {
         assert_eq!(connection_of(0x03), Connection::Usb);
-        assert_eq!(connection_of(0x05), Connection::Bluetooth);
+        // Bluetooth HOGP arrives on bus 0x05 and is out of scope: it must be
+        // reported as unknown rather than as something we claim to support.
+        assert_eq!(connection_of(0x05), Connection::Unknown);
+        assert_eq!(connection_of(0x00), Connection::Unknown);
     }
 }

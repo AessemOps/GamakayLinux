@@ -4,7 +4,7 @@
 pkgname=gamakaylinux
 pkgver=0.1.0
 pkgrel=1
-pkgdesc="Configure the GamaKay LK67 keyboard from Linux (USB, 2.4 GHz, Bluetooth)"
+pkgdesc="Configure the GamaKay LK67 keyboard from Linux over USB"
 arch=('x86_64' 'aarch64')
 url="https://github.com/AessemOps/GamakayLinux"
 license=('GPL-3.0-or-later')
