@@ -101,6 +101,8 @@ overrides:
       - libxrandr2
       - libvulkan1
       - libglvnd0
+      # wgpu can fall back to the GL backend, which needs libEGL.
+      - libegl1
       - fonts-dejavu-core
   rpm:
     depends:
@@ -113,6 +115,7 @@ overrides:
       - libXrandr
       - vulkan-loader
       - libglvnd
+      - libglvnd-egl
       - dejavu-sans-fonts
 
 scripts:

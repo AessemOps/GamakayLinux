@@ -10,4 +10,4 @@ authors.workspace = true
 
 [dependencies]
 gamakay-core.workspace = true
-libc = "0.2"
+libc.workspace = true

@@ -62,15 +62,8 @@ pub struct LightArgs {
 }
 
 pub fn parse_color(s: &str) -> Result<[u8; 3], String> {
-    let t = s.trim().trim_start_matches('#');
-    // Byte offsets below, so a six-*byte* non-ASCII argument (say "€€") would
-    // otherwise panic on a char boundary instead of being rejected.
-    if t.len() != 6 || !t.is_ascii() {
-        return Err(format!("colour must be 6 hex digits, got {s:?}"));
-    }
-    let b =
-        |i: usize| u8::from_str_radix(&t[i..i + 2], 16).map_err(|_| format!("bad colour {s:?}"));
-    Ok([b(0)?, b(2)?, b(4)?])
+    gamakay_core::color::parse_hex(s)
+        .ok_or_else(|| format!("colour must be 6 hex digits, got {s:?}"))
 }
 
 pub fn run(cli: &Cli, action: Option<&LightCmd>) -> Result<()> {
@@ -211,17 +204,13 @@ fn resolve_mode(s: &str, edge: bool) -> Result<u8> {
     if let Ok(n) = s.trim().parse::<u8>() {
         // A numeric code is only accepted when it names a mode the board
         // implements: writing an arbitrary byte is a silent misconfiguration.
-        let known = if edge {
-            EdgeMode::from_code(n).is_some()
-        } else {
-            Mode::from_code(n).is_some()
-        };
-        if known {
+        if gamakay_core::light::is_mode_code(n) {
             return Ok(n);
         }
         bail!(
-            "unknown {} mode code {n} (this firmware implements 1..=25)",
-            if edge { "edge" } else { "backlight" }
+            "unknown {} mode code {n} (this firmware implements 1..={})",
+            if edge { "edge" } else { "backlight" },
+            gamakay_core::light::MAX_MODE_CODE
         );
     }
     if edge {

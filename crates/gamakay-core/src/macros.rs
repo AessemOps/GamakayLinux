@@ -211,14 +211,14 @@ pub fn parse_steps(s: &str) -> Result<Vec<MacroEvent>> {
                 b.trim(),
                 d.trim()
                     .parse::<u16>()
-                    .map_err(|_| Error::Transport(format!("bad delay in {tok:?}")))?,
+                    .map_err(|_| Error::Parse(format!("bad delay in {tok:?}")))?,
             ),
             None => (tok, 0u16),
         };
         if let Some(rest) = body.strip_prefix("move:") {
             let (dx, dy) = rest
                 .split_once(':')
-                .ok_or_else(|| Error::Transport(format!("move needs dx:dy, got {rest:?}")))?;
+                .ok_or_else(|| Error::Parse(format!("move needs dx:dy, got {rest:?}")))?;
             let dx: i8 = dx
                 .trim()
                 .parse()
@@ -254,7 +254,7 @@ pub fn parse_steps(s: &str) -> Result<Vec<MacroEvent>> {
         }
         let (name, pressed) = split_press(body)?;
         let usage = crate::keycode::usage(name)
-            .ok_or_else(|| Error::Transport(format!("unknown key {name:?}")))?;
+            .ok_or_else(|| Error::Parse(format!("unknown key {name:?}")))?;
         events.push(MacroEvent::Key {
             usage,
             pressed,
@@ -270,7 +270,7 @@ fn split_press(s: &str) -> Result<(&str, bool)> {
     } else if let Some(n) = s.strip_suffix('-') {
         Ok((n.trim(), false))
     } else {
-        Err(Error::Transport(format!(
+        Err(Error::Parse(format!(
             "event {s:?} needs + (down) or - (up)"
         )))
     }
@@ -369,6 +369,18 @@ impl Session<'_> {
     }
 }
 
+/// A malformed step list is the user's input, not a transport failure: the
+/// message used to read "transport error" for a typo.
+#[test]
+fn a_bad_step_list_is_a_parse_error() {
+    for bad in ["nope", "A+@", "A+@zz", "A", "move 1"] {
+        match crate::macros::parse_steps(bad) {
+            Err(Error::Parse(_)) => {}
+            other => panic!("{bad:?} gave {other:?}"),
+        }
+    }
+    assert!(crate::macros::parse_steps("A+@20, A-@20").is_ok());
+}
 #[cfg(test)]
 mod tests {
     use super::*;

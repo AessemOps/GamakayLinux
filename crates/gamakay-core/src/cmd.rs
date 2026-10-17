@@ -20,7 +20,6 @@ pub const GET_SLEDPARAM: u8 = 0x88;
 /// by capture. Header `[slot, 0, 1, page, 0, 0]`, 56 bytes at byte 8, 5 pages.
 pub const SET_MACRO: u8 = 0x0B;
 /// The reference yc500 macro write; ignored by the LK67. Kept for reference.
-pub const SET_MACRO_YC500: u8 = 0x16;
 pub const GET_MACRO: u8 = 0x8B;
 /// Auto-OS: `[0|1]` on SET, `reply[1] == 1` on GET.
 pub const SET_AUTO_OS: u8 = 0x17;

@@ -14,6 +14,12 @@ umask 077
 VID="${VID:-3151}"
 PID="${PID:-4003}"
 # tshark's USB fields are decimal.
+# Both are interpolated into a tshark filter, so insist on exactly four hex
+# digits before that happens.
+case "$VID" in [0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]) ;; *)
+    echo "VID must be four hex digits, got ${VID}" >&2; exit 2 ;; esac
+case "$PID" in [0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]) ;; *)
+    echo "PID must be four hex digits, got ${PID}" >&2; exit 2 ;; esac
 VID_DEC="$((16#${VID}))"
 PID_DEC="$((16#${PID}))"
 DUR="${1:-60}"

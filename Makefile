@@ -12,6 +12,10 @@ VERSION      ?= $(shell sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1
 # environment, e.g. NFPM=./tools/nfpm.
 NFPM         ?= nfpm
 APPIMAGETOOL ?= appimagetool
+# The runtime appimagetool embeds. Unset, appimagetool downloads it from a
+# rolling `continuous` URL at build time, unverified; set it to a file you have
+# checked (see docs/packaging.md) and it is used instead.
+APPIMAGE_RUNTIME ?=
 DEB_ARCH     ?= amd64
 RPM_ARCH     ?= x86_64
 APPIMAGE_ARCH ?= x86_64
@@ -32,9 +36,8 @@ test:
 fmt:
 	cargo fmt --all
 
-check: fmt
-	cargo clippy --all-targets -- -D warnings
-	cargo test
+check: lint
+	cargo test --all --locked
 
 lint:
 	cargo fmt --all --check
@@ -51,6 +54,12 @@ install: release
 	install -Dm755 target/release/gamakay $(DESTDIR)$(BINDIR)/gamakay
 	install -Dm755 target/release/gamakay-gui $(DESTDIR)$(BINDIR)/gamakay-gui
 	install -Dm644 packaging/udev/70-gamakay.rules $(DESTDIR)$(UDEVDIR)/70-gamakay.rules
+	install -Dm644 packaging/io.github.aessemops.gamakaylinux.metainfo.xml \
+		$(DESTDIR)$(PREFIX)/share/metainfo/io.github.aessemops.gamakaylinux.metainfo.xml
+	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/gamakaylinux/LICENSE
+	install -Dm644 CREDITS.md $(DESTDIR)$(PREFIX)/share/licenses/gamakaylinux/CREDITS.md
+	install -Dm644 crates/gamakay-gui/assets/NotoEmoji-OFL.txt \
+		$(DESTDIR)$(PREFIX)/share/licenses/gamakaylinux/NotoEmoji-OFL.txt
 	install -Dm644 packaging/gamakay.desktop \
 		$(DESTDIR)$(PREFIX)/share/applications/gamakay.desktop
 	for size in 16 24 32 48 64 128 256 512; do \
@@ -106,8 +115,9 @@ package-appimage: release
 	install -Dm644 CHANGELOG.md $(DIST)/AppDir/usr/share/doc/gamakaylinux/CHANGELOG.md
 	install -Dm644 crates/gamakay-gui/assets/NotoEmoji-OFL.txt \
 		$(DIST)/AppDir/usr/share/doc/gamakaylinux/NotoEmoji-OFL.txt
-	ARCH=$(APPIMAGE_ARCH) $(APPIMAGETOOL) $(DIST)/AppDir \
-		$(DIST)/GamakayLinux-$(VERSION)-$(APPIMAGE_ARCH).AppImage
+	ARCH=$(APPIMAGE_ARCH) $(APPIMAGETOOL) \
+		$(if $(APPIMAGE_RUNTIME),--runtime-file $(APPIMAGE_RUNTIME),) \
+		$(DIST)/AppDir $(DIST)/GamakayLinux-$(VERSION)-$(APPIMAGE_ARCH).AppImage
 	@echo "-> $(DIST)/GamakayLinux-$(VERSION)-$(APPIMAGE_ARCH).AppImage"
 
 packages: package-deb package-rpm package-appimage
@@ -118,6 +128,7 @@ packages: package-deb package-rpm package-appimage
 # needed: `ar` and `tar` read a .deb, and rpm queries with a scratch db path so
 # it does not complain about having no database on a non-rpm host.
 RPMDB ?= $(CURDIR)/dist/.rpmdb
+# Needs rpm and rg (see docs/packaging.md).
 package-verify:
 	@ls -l $(DIST) | sed 's/^/  /'
 	@echo "--- deb: control --------------------------------------------"

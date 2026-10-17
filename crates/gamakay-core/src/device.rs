@@ -13,15 +13,12 @@
 pub enum Family {
     /// The LK67's family (older, 0x8F identify, single-slot key writes).
     Yc500,
-    /// Newer lineage; present in the table only to refuse it loudly.
-    Gen2,
 }
 
 impl Family {
     pub const fn name(self) -> &'static str {
         match self {
             Family::Yc500 => "yc500",
-            Family::Gen2 => "gen2",
         }
     }
 }
@@ -46,7 +43,6 @@ pub struct DeviceRecord {
     pub family: Family,
     /// Number of onboard layers (the vendor's `layer`).
     pub layer: u8,
-    pub profiles: u8,
     /// Vendor `support_onboard`: 2 means every setting is written to keyboard
     /// memory, so no resident host process is needed.
     pub support_onboard: u8,
@@ -77,7 +73,6 @@ pub const LK67: DeviceRecord = DeviceRecord {
     feature_report_byte_length: 65,
     family: Family::Yc500,
     layer: 8,
-    profiles: 3,
     support_onboard: 2,
     key_layout: "LK67",
     light_layout: "LK67",
@@ -125,7 +120,6 @@ pub const YZ68: DeviceRecord = DeviceRecord {
     feature_report_byte_length: 65,
     family: Family::Yc500,
     layer: 8,
-    profiles: 2,
     support_onboard: 2,
     key_layout: "Common68_RT68~k1",
     light_layout: "se",

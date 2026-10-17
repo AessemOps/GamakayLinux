@@ -1392,7 +1392,7 @@ dependencies = [
  "gamakay-core",
  "gamakay-hidraw",
  "iced",
- "ttf-parser 0.20.0",
+ "ttf-parser 0.25.1",
 ]
 
 [[package]]

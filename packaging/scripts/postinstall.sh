@@ -6,7 +6,7 @@
 # the hidraw subsystem is enough — no replug, no reboot. Failure is not fatal:
 # the tool works read-only without the rule, and an unprivileged container may
 # have no udev at all.
-set -e
+set -eu
 
 if command -v udevadm >/dev/null 2>&1; then
     udevadm control --reload-rules >/dev/null 2>&1 || true

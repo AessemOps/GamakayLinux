@@ -3,6 +3,10 @@
 //! UI only sends requests and reacts to events, so it never blocks and does no
 //! work while idle.
 
+/// How often the lighting preview advances. The preview runs on its own clock
+/// (`phase`), so the step is derived from this rather than hard-coded.
+const TICK: std::time::Duration = std::time::Duration::from_millis(40);
+
 mod canvas;
 mod color;
 mod colorwheel;
@@ -29,7 +33,7 @@ use iced::{Background, Border, Color, Element, Length, Subscription, Theme};
 use gamakay_core::keycode;
 use gamakay_core::keymap::{Slot, SlotValue};
 use gamakay_core::layout::{LK67_HEIGHT, LK67_LAYOUT, LK67_WIDTH, LayoutKey};
-use gamakay_core::light::{LK67_FLAGS, LedParam, LedState, Mode};
+use gamakay_core::light::{self, LK67_FLAGS, LedParam, LedState, Mode};
 use gamakay_core::macros::{MACRO_SLOTS, MACRO_STREAM_MAX, MacroEvent};
 use worker::{Event, Request, Summary};
 
@@ -91,7 +95,7 @@ struct App {
     speed: u8,
     direction: u8,
     rainbow: bool,
-    /// Animation phase for the lighting preview.
+    /// Seconds of preview animation time; advanced by [`TICK`].
     phase: f32,
     // Keymap editor.
     fn_layer: bool,
@@ -246,7 +250,8 @@ impl App {
                 // The macro list is read on demand: at connect it would be 200
                 // feature transfers before the window can do anything useful.
                 if t == Tab::Macros && !self.macros_loaded {
-                    self.macros_loaded = true;
+                    // Not set here: a request lost to a disconnect would leave
+                    // the list empty for the rest of the session.
                     self.send(Request::ReadMacros);
                 }
             }
@@ -297,7 +302,7 @@ impl App {
             Message::PickColor(h, s) => {
                 self.color = color::to_hex(rgb8(color::hsv_to_rgb(h, s, 1.0)));
             }
-            Message::Tick => self.phase += 0.04,
+            Message::Tick => self.phase += TICK.as_secs_f32(),
             Message::SelectSlot(slot) => {
                 self.selected = Some(slot);
                 self.slot_edit = self
@@ -344,6 +349,10 @@ impl App {
                 self.summary = Some(s);
             }
             Event::Disconnected => {
+                // The macro list belongs to the board that just went away.
+                self.macros_loaded = false;
+                self.macros.clear();
+                self.rebuild_slot_choices();
                 self.connected = false;
                 self.summary = None;
                 self.status = "no keyboard found".into();
@@ -487,9 +496,7 @@ impl App {
         // Only animate while the selected mode actually moves: a static mode
         // would otherwise have the whole preview rebuilt 25 times a second.
         if self.tab == Tab::Lighting && patterns::animates(&self.pattern_params()) {
-            subs.push(
-                iced::time::every(std::time::Duration::from_millis(40)).map(|_| Message::Tick),
-            );
+            subs.push(iced::time::every(TICK).map(|_| Message::Tick));
         }
         // While a key is selected on the Keymap tab, the next key press binds
         // it — the VIA "press a key" flow.
@@ -608,7 +615,7 @@ impl App {
             return Some(code);
         }
         match self.mode.trim().parse::<u8>() {
-            Ok(n) if (1..=25).contains(&n) => Some(n),
+            Ok(n) if light::is_mode_code(n) => Some(n),
             _ => None,
         }
     }

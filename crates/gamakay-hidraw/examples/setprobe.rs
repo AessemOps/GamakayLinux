@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+//! Writes unless SETPROBE_ALLOW_WRITE is set: this example can send the
+//! factory reset, so it is read-only by default.
+//!
 //! Diagnostic: identify, send one SET, then drain reads and read back.
 //!
 //! ```text
@@ -41,7 +44,11 @@ fn main() {
         .unwrap_or_default();
 
     let mut dev = HidrawDevice::open(&path).expect("open");
-    let mut s = Session::new(&mut dev, Guard::new(false)).with_settle(0);
+    let mut s = Session::new(
+        &mut dev,
+        Guard::new(!std::env::var("SETPROBE_ALLOW_WRITE").is_ok()),
+    )
+    .with_settle(0);
 
     // Identify first.
     match s.roundtrip(cmd::GET_USB_VERSION, &[], Checksum::Bit7) {

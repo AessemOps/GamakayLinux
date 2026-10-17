@@ -21,14 +21,10 @@ pub enum Error {
     NotAllowed { opcode: u8 },
     /// A payload that does not fit a 64-byte report.
     PayloadTooLong { len: usize },
-    /// The identified device is not in the table.
-    UnknownDevice { id: u32 },
-    /// The identified device is a known mismatched firmware id.
-    VariantWarning { id: u32, expected: u32 },
-    /// A feature the current transport does not carry (from the matrix).
-    UnsupportedOnTransport(String),
-    /// No matching hidraw node was found.
-    DeviceNotFound,
+    /// A payload whose byte would be overwritten by the checksum.
+    PayloadOverChecksum { at: usize },
+    /// A value the caller passed could not be parsed (no transport involved).
+    Parse(String),
     /// The value the caller passed is out of range for the field.
     OutOfRange { field: &'static str, value: i64 },
     /// Two full reads of a layer disagreed, so neither can be trusted. Writing
@@ -64,16 +60,14 @@ impl fmt::Display for Error {
             Self::PayloadTooLong { len } => {
                 write!(f, "payload of {len} bytes does not fit a 64-byte report")
             }
-            Self::UnknownDevice { id } => write!(f, "unknown device id {id}"),
-            Self::VariantWarning { id, expected } => write!(
-                f,
-                "device reports id {id} (expected {expected}): mismatched firmware"
-            ),
-            Self::UnsupportedOnTransport(m) => write!(f, "{m}"),
-            Self::DeviceNotFound => write!(f, "no GamaKay hidraw device found"),
             Self::OutOfRange { field, value } => {
                 write!(f, "{field} = {value} is out of range")
             }
+            Self::PayloadOverChecksum { at } => write!(
+                f,
+                "payload byte {at} would be overwritten by the checksum; the payload must leave that byte zero"
+            ),
+            Self::Parse(m) => write!(f, "{m}"),
             Self::UnstableLayer { tries } => write!(
                 f,
                 "the board returned a different keymap on each of {tries} reads; refusing to act on an unconfirmed layer (replug the keyboard and retry)"

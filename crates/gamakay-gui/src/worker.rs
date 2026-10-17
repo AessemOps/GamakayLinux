@@ -201,6 +201,7 @@ impl Worker {
             self.emit(Event::Disconnected);
         }
         self.layer = None;
+        self.writes_allowed = false;
         let Some(info) = gamakay_hidraw::find_supported() else {
             self.emit(Event::Disconnected);
             return false;
@@ -255,9 +256,12 @@ impl Worker {
                 // A device that has gone away never recovers in place: drop the
                 // handle so the next request re-enumerates. Whatever was cached
                 // for it is not known to be current any more.
-                if matches!(e, CoreError::Transport(_) | CoreError::DeviceNotFound) {
+                if matches!(e, CoreError::Transport(_)) {
                     self.device = None;
                     self.layer = None;
+                    // The board's identity is not known for whatever comes
+                    // next, so writes stay refused until it identifies again.
+                    self.writes_allowed = false;
                     self.emit(Event::Disconnected);
                 }
                 self.emit(Event::Error(e.to_string()));
@@ -281,6 +285,7 @@ impl Worker {
             let profile = s.profile().unwrap_or(0);
             Ok((id, rev, profile))
         }) else {
+            self.writes_allowed = false;
             self.emit(Event::Disconnected);
             return;
         };
@@ -393,7 +398,18 @@ impl Worker {
         self.read_summary();
         self.read_layer(false);
         self.read_layer(true);
-        self.emit(Event::Status(format!("layer {} active", profile + 1)));
+        // Only now claim the switch: if the layers could not be read, the UI
+        // would otherwise highlight the new profile while showing the old
+        // keymap, and the next key the user assigns would come from the wrong
+        // picture.
+        if self.layer.as_ref().is_some_and(|(p, ..)| *p == profile) {
+            self.emit(Event::Status(format!("layer {} active", profile + 1)));
+        } else {
+            self.emit(Event::Error(format!(
+                "layer {profile} was selected on the board but its keymap could not be read; \
+                 press Reconnect to try again"
+            )));
+        }
     }
 
     fn set_slot(&mut self, fn_layer: bool, slot: u8, value: SlotValue) {
@@ -402,7 +418,9 @@ impl Worker {
         // (see "Writes (SET)" in docs/protocol.md). The write is applied either
         // way, so the UI is updated from the copy we just sent.
         for attempt in 0..2 {
-            let profile = self.with_session(|s| s.profile()).unwrap_or(0);
+            let Some(profile) = self.with_session(|s| s.profile()) else {
+                return;
+            };
             // Reuse the layer this worker last read for this profile: a bind is
             // a read-modify-write of the whole layer and a layer read is two
             // 8-page passes, so binding several keys in a row would otherwise
@@ -415,6 +433,13 @@ impl Worker {
                     None => return,
                 },
             };
+            if usize::from(slot) >= gamakay_core::keymap::TX_SLOTS {
+                self.emit(Event::Error(format!(
+                    "slot {slot} cannot be written: a bulk write reaches slots 0..{}",
+                    gamakay_core::keymap::TX_SLOTS - 1
+                )));
+                return;
+            }
             if !km.set(slot as usize, Slot::from_value(value)) {
                 self.emit(Event::Error(format!("slot {slot} is not in the layer")));
                 return;

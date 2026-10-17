@@ -7,6 +7,7 @@
 /packaging/arch/pkg/
 /packaging/arch/src/
 *.pkg.tar.zst
+packaging/arch/.SRCINFO
 
 # Clean-room: the extracted vendor app and raw captures are never committed.
 /vendor/
