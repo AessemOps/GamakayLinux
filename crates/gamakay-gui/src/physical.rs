@@ -170,4 +170,50 @@ mod tests {
         assert_eq!(usage(&Physical::Code(Code::KeyQ)), Some(0x14));
         assert_eq!(keycode::name(0x14), Some("Q"));
     }
+
+    /// The table above is a second copy of the usage numbering `keycode` owns,
+    /// so a renumbering there would have this silently bind the wrong key.
+    /// Compare a spread of positions — letters, digits, punctuation, editing
+    /// keys, the keypad and every modifier — against core's name table.
+    #[test]
+    fn the_table_agrees_with_the_core_usage_numbers() {
+        let pairs = [
+            (Code::KeyA, "A"),
+            (Code::KeyZ, "Z"),
+            (Code::Digit1, "1"),
+            (Code::Digit0, "0"),
+            (Code::Enter, "Enter"),
+            (Code::Escape, "Esc"),
+            (Code::Tab, "Tab"),
+            (Code::Space, "Space"),
+            (Code::Backspace, "Backspace"),
+            (Code::CapsLock, "CapsLock"),
+            (Code::Slash, "Slash"),
+            (Code::F1, "F1"),
+            (Code::F12, "F12"),
+            (Code::ArrowUp, "Up"),
+            (Code::Delete, "Delete"),
+            (Code::Numpad7, "KP7"),
+            (Code::Numpad0, "KP0"),
+            (Code::NumpadEnter, "KPEnter"),
+            (Code::NumpadEqual, "KP="),
+            (Code::ControlLeft, "LeftCtrl"),
+            (Code::ControlRight, "RightCtrl"),
+            (Code::ShiftLeft, "LeftShift"),
+            (Code::ShiftRight, "RightShift"),
+            (Code::AltLeft, "LeftAlt"),
+            (Code::AltRight, "RightAlt"),
+            (Code::SuperLeft, "LeftGui"),
+            (Code::SuperRight, "RightGui"),
+        ];
+        for (code, name) in pairs {
+            let expected =
+                keycode::usage(name).unwrap_or_else(|| panic!("core has no name {name:?}"));
+            assert_eq!(
+                usage(&Physical::Code(code)),
+                Some(expected),
+                "{code:?} should be {name} (0x{expected:02X})"
+            );
+        }
+    }
 }

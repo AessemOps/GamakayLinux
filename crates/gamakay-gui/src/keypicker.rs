@@ -142,7 +142,9 @@ pub const MEDIA: &[Entry] = &[
     con("Vol-", 0x00EA),
     con("Vol+", 0x00E9),
     con("Mute", 0x00E2),
-    con("Play", 0x00CD),
+    // 0x00CD is Play/Pause, not plain Play: the label has to say so, since the
+    // slot list and the legend are rendered from `consumer_name`.
+    con("Play/Pause", 0x00CD),
     con("Next", 0x00B5),
     con("Prev", 0x00B6),
 ];
@@ -150,7 +152,9 @@ pub const MEDIA: &[Entry] = &[
 pub const SPECIAL: &[Entry] = &[
     ("Fn", SlotValue::Special(1)),
     ("Caps LED", SlotValue::Special(17)),
-    ("Power save", SlotValue::Special(12)),
+    // Named to match `Slot::describe`, which is what the slot list and the
+    // keymap legend show for this value.
+    ("Backlight on/off", SlotValue::Special(12)),
     ("None", SlotValue::Empty),
 ];
 
@@ -180,6 +184,43 @@ mod tests {
                         gamakay_core::keycode::name(*u).is_some(),
                         "picker {label} -> 0x{u:02X} has no name"
                     );
+                }
+            }
+        }
+    }
+
+    /// The picker holds its own copy of the HID usage table, so a renumbering
+    /// in `gamakay_core::keycode` would have it silently bind a different key.
+    /// Where the label is a name core knows, insist the two agree; and in every
+    /// case insist the usage round-trips through core's name table.
+    #[test]
+    fn entries_agree_with_the_core_usage_table() {
+        for (_, entries) in CATEGORIES {
+            for (label, value) in *entries {
+                match value {
+                    SlotValue::Hid(u) => {
+                        if let Some(canonical) = gamakay_core::keycode::usage(label) {
+                            assert_eq!(
+                                canonical, *u,
+                                "picker {label} binds 0x{u:02X}, core says 0x{canonical:02X}"
+                            );
+                        }
+                        let name = gamakay_core::keycode::name(*u).expect("named");
+                        assert_eq!(
+                            gamakay_core::keycode::usage(name),
+                            Some(*u),
+                            "0x{u:02X} ({name}) does not round-trip"
+                        );
+                    }
+                    SlotValue::Consumer(c) => {
+                        let name = gamakay_core::keycode::consumer_name(*c)
+                            .unwrap_or_else(|| panic!("picker {label} has no consumer name"));
+                        assert_eq!(
+                            name, *label,
+                            "picker label {label:?} does not match consumer name {name:?}"
+                        );
+                    }
+                    _ => {}
                 }
             }
         }

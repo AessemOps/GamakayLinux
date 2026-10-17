@@ -89,6 +89,10 @@ struct Worker {
     /// The macros read from the board, kept so a write can update the list
     /// without re-reading all 50 slots (200 feature transfers).
     macros: Vec<(u8, String)>,
+    /// The last layer read from the board: `(profile, fn_layer, keymap)`. Binding
+    /// a key is a read-modify-write of the whole layer, and a layer read is two
+    /// 8-page passes, so keeping what was just read saves that on every bind.
+    layer: Option<(u8, bool, Keymap)>,
 }
 
 impl Worker {
@@ -98,6 +102,7 @@ impl Worker {
             device: None,
             fn_locked: &[],
             macros: Vec::new(),
+            layer: None,
         }
     }
 
@@ -161,10 +166,25 @@ impl Worker {
         if self.device.take().is_some() {
             self.emit(Event::Disconnected);
         }
+        self.layer = None;
         let Some(info) = gamakay_hidraw::find_supported() else {
             self.emit(Event::Disconnected);
             return false;
         };
+        // Never write to a device that is not a known GamaKay board:
+        // `find_supported` falls back to *any* hidraw node with a 64-byte
+        // feature report, and this worker writes backlight, keymap and macro
+        // packets. The CLI gates on the same thing, with `--force` to override.
+        if gamakay_core::device::by_usb(info.vendor_id, info.product_id).is_empty() {
+            self.emit(Event::Error(format!(
+                "{} ({:04x}:{:04x}) is not a recognised GamaKay keyboard",
+                info.path.display(),
+                info.vendor_id,
+                info.product_id
+            )));
+            self.emit(Event::Disconnected);
+            return false;
+        }
         match HidrawDevice::open(&info.path) {
             Ok(dev) => {
                 self.device = Some((dev, info));
@@ -198,9 +218,11 @@ impl Worker {
             Ok(v) => Some(v),
             Err(e) => {
                 // A device that has gone away never recovers in place: drop the
-                // handle so the next request re-enumerates.
+                // handle so the next request re-enumerates. Whatever was cached
+                // for it is not known to be current any more.
                 if matches!(e, CoreError::Transport(_) | CoreError::DeviceNotFound) {
                     self.device = None;
+                    self.layer = None;
                     self.emit(Event::Disconnected);
                 }
                 self.emit(Event::Error(e.to_string()));
@@ -255,6 +277,7 @@ impl Worker {
     fn read_layer(&mut self, fn_layer: bool) {
         let profile = self.with_session(|s| s.profile()).unwrap_or(0);
         if let Some(km) = self.with_session(|s| s.read_layer(profile, fn_layer)) {
+            self.layer = Some((profile, fn_layer, km.clone()));
             self.emit(Event::Layer {
                 fn_layer,
                 slots: layer_slots(&km),
@@ -317,6 +340,8 @@ impl Worker {
         if self.with_session(|s| s.set_profile(profile)).is_none() {
             return;
         }
+        // The active profile changed, so nothing cached belongs to it.
+        self.layer = None;
         self.read_summary();
         self.read_layer(false);
         self.read_layer(true);
@@ -330,14 +355,22 @@ impl Worker {
         // way, so the UI is updated from the copy we just sent.
         for attempt in 0..2 {
             let profile = self.with_session(|s| s.profile()).unwrap_or(0);
-            let result = self.with_session(|s| {
-                let mut km = s.read_layer(profile, fn_layer)?;
-                km.set(slot as usize, Slot::from_value(value));
-                s.write_layer(profile, &km, fn_layer)?;
-                Ok(km)
-            });
-            match result {
-                Some(km) => {
+            // Reuse the layer this worker last read for this profile: a bind is
+            // a read-modify-write of the whole layer and a layer read is two
+            // 8-page passes, so binding several keys in a row would otherwise
+            // pay that before every one. The live profile is re-read each time,
+            // so a profile swapped on the keyboard itself is still noticed.
+            let mut km = match &self.layer {
+                Some((p, f, km)) if *p == profile && *f == fn_layer => km.clone(),
+                _ => match self.with_session(|s| s.read_layer(profile, fn_layer)) {
+                    Some(km) => km,
+                    None => return,
+                },
+            };
+            km.set(slot as usize, Slot::from_value(value));
+            match self.with_session(|s| s.write_layer(profile, &km, fn_layer)) {
+                Some(()) => {
+                    self.layer = Some((profile, fn_layer, km.clone()));
                     self.emit(Event::Layer {
                         fn_layer,
                         slots: layer_slots(&km),
@@ -350,8 +383,15 @@ impl Worker {
                     self.emit(Event::Status(format!("slot {slot} updated")));
                     return;
                 }
-                None if attempt == 0 && self.device.is_none() => continue,
-                None => return,
+                None => {
+                    // The handle may have been dropped, in which case the board
+                    // state is unknown: retry once against a fresh read.
+                    self.layer = None;
+                    if attempt == 0 && self.device.is_none() {
+                        continue;
+                    }
+                    return;
+                }
             }
         }
     }

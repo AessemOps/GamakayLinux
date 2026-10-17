@@ -12,7 +12,6 @@ use gamakay_core::layout::{LK67_HEIGHT, LK67_LAYOUT, LK67_WIDTH, LayoutKey};
 
 use crate::Message;
 use crate::glyph;
-use crate::patterns::{self, Params};
 
 const GAP: f32 = 4.0;
 const RADIUS: f32 = 5.0;
@@ -36,38 +35,6 @@ pub struct Keyboard<'a> {
     pub locked: &'a std::collections::HashSet<u8>,
     /// Whether the Fn layer is the one being shown.
     pub fn_layer: bool,
-    /// A live lighting preview (colour, rainbow, brightness, animation).
-    pub lighting: Option<LightPreview>,
-}
-
-/// The lighting settings previewed on the board.
-#[derive(Clone, Copy)]
-pub struct LightPreview {
-    pub mode: u8,
-    pub speed: u8,
-    /// 0..=4.
-    pub brightness: u8,
-    pub option: u8,
-    pub rainbow: bool,
-    pub rgb: [u8; 3],
-    /// Seconds since the preview started.
-    pub t: f32,
-}
-
-/// The fill for one key under the current lighting preview.
-fn key_color(lp: &LightPreview, k: &LayoutKey, index: usize) -> Color {
-    let p = Params {
-        mode: lp.mode,
-        speed: lp.speed,
-        brightness: lp.brightness,
-        brightness_max: 4,
-        option: lp.option,
-        rainbow: lp.rainbow,
-        rgb: lp.rgb,
-    };
-    let x = (k.x + k.w / 2.0) / LK67_WIDTH;
-    let y = (k.y + k.h / 2.0) / LK67_HEIGHT;
-    patterns::color_at(&p, x, y, index, lp.t / patterns::FRAME_MS)
 }
 
 /// A `Canvas` widget over the layout.
@@ -128,7 +95,7 @@ impl Program<Message> for Keyboard<'_> {
         let ox = (bounds.width - LK67_WIDTH * scale) / 2.0;
         let oy = (bounds.height - LK67_HEIGHT * scale) / 2.0;
 
-        for (index, k) in LK67_LAYOUT.iter().enumerate() {
+        for k in LK67_LAYOUT.iter() {
             let rect = Rectangle::new(
                 Point::new(ox + k.x * scale + GAP / 2.0, oy + k.y * scale + GAP / 2.0),
                 Size::new((k.w * scale - GAP).max(2.0), (k.h * scale - GAP).max(2.0)),
@@ -149,9 +116,7 @@ impl Program<Message> for Keyboard<'_> {
             } else if locked {
                 KEY_LOCKED
             } else {
-                self.lighting
-                    .map(|lp| key_color(&lp, k, index))
-                    .unwrap_or(KEY_BG)
+                KEY_BG
             };
             let path = Path::rounded_rectangle(rect.position(), rect.size(), RADIUS.into());
             frame.fill(&path, fill);

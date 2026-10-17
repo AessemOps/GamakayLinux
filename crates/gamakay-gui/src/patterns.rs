@@ -275,6 +275,19 @@ static LAYERS: LazyLock<LayerScript> = LazyLock::new(|| {
     }
 });
 
+/// Whether this mode's preview can change from one frame to the next.
+///
+/// The modes whose arm in [`color_at`] ignores the frame are the static ones.
+/// This is deliberately conservative — a mode whose arm reads the frame but
+/// happens not to change at a given frame is still reported as animating — and
+/// the reverse is what matters: reporting a moving mode as static would freeze
+/// its preview, which `a_moving_preview_always_keeps_its_timer` forbids. Used
+/// to stop the animation timer for a static mode, which would otherwise rebuild
+/// the whole preview 25 times a second for a picture that never changes.
+pub fn animates(p: &Params) -> bool {
+    !matches!(p.mode, 1 | 19)
+}
+
 /// The colour of one key at a frame.
 pub fn color_at(p: &Params, x: f32, y: f32, index: usize, frame: f32) -> Color {
     let wire = wire_speed(p.speed) as usize;
@@ -682,5 +695,52 @@ mod tests {
     fn layers_script_is_built() {
         assert!(!LAYERS.cells.is_empty());
         assert!(LAYERS.total > LAYERS_REST);
+    }
+
+    /// The animation timer is gated on this. Reporting a moving mode as static
+    /// would freeze its preview, so that direction is asserted here against
+    /// `color_at` on a dense grid; the other direction only costs a redraw of a
+    /// picture that happens not to change.
+    #[test]
+    fn a_moving_preview_always_keeps_its_timer() {
+        let params = |mode, rainbow| Params {
+            mode,
+            speed: 2,
+            brightness: 4,
+            brightness_max: 4,
+            option: 0,
+            rainbow,
+            rgb: [255, 0, 0],
+        };
+        // A dense grid and several frames spanning many steps, so a sparse or
+        // slow mode (star dots lights only a few keys at a time) is still seen
+        // moving.
+        let moves = |mode, rainbow| {
+            let p = params(mode, rainbow);
+            (0..GRID_ROWS * 2)
+                .flat_map(|r| (0..GRID_COLS * 2).map(move |c| (r, c)))
+                .any(|(r, c)| {
+                    let x = (r as f32 + 0.5) / (GRID_ROWS * 2) as f32;
+                    let y = (c as f32 + 0.5) / (GRID_COLS * 2) as f32;
+                    [0.0f32, 400.0, 1600.0].windows(2).any(|f| {
+                        (0..64).any(|index| {
+                            color_at(&p, x, y, index, f[0]) != color_at(&p, x, y, index, f[1])
+                        })
+                    })
+                })
+        };
+        for mode in 1..=19u8 {
+            for rainbow in [false, true] {
+                if moves(mode, rainbow) {
+                    assert!(
+                        animates(&params(mode, rainbow)),
+                        "mode {mode} (rainbow {rainbow}) moves, so it must keep a timer"
+                    );
+                }
+            }
+        }
+        // And the reason the gate exists: a static mode does not animate.
+        assert!(!animates(&params(1, false)));
+        assert!(!animates(&params(1, true)));
     }
 }

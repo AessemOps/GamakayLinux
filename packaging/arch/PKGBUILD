@@ -1,6 +1,5 @@
 # Maintainer: GamakayLinux contributors
-# Arch/CachyOS package for GamakayLinux. The GUI is Phase 5 and not built yet;
-# this package ships the CLI and the udev rule.
+# Arch/CachyOS package for GamakayLinux: the CLI, the iced GUI and the udev rule.
 
 pkgname=gamakaylinux
 pkgver=0.1.0
@@ -9,7 +8,10 @@ pkgdesc="Configure the GamaKay LK67 keyboard from Linux (USB, 2.4 GHz, Bluetooth
 arch=('x86_64' 'aarch64')
 url="https://github.com/AessemOps/GamakayLinux"
 license=('GPL-3.0-or-later')
-depends=()
+# The GUI loads its display, input and GPU stack with dlopen at runtime, so none
+# of it shows up in `ldd`: without these the packaged binary fails to start.
+depends=('libxkbcommon' 'wayland' 'libx11' 'libxcursor' 'libxi' 'libxrandr'
+         'vulkan-icd-loader' 'libglvnd' 'ttf-dejavu')
 makedepends=('cargo' 'rust')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
 sha256sums=('SKIP')

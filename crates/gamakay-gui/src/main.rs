@@ -119,6 +119,8 @@ struct App {
     recorder: recorder::Recorder,
     /// Shown under the recorder when saving is refused.
     macro_note: String,
+    /// The slot picker's entries, rebuilt when the stored macros change.
+    slot_choices: Vec<SlotChoice>,
 }
 
 /// One entry of the slot picker: its index and a label naming what the slot
@@ -197,7 +199,7 @@ impl App {
             .nth(1)
             .and_then(|a| Tab::from_arg(&a))
             .unwrap_or(Tab::Info);
-        let app = Self {
+        let mut app = Self {
             req,
             tab,
             connected: false,
@@ -227,7 +229,9 @@ impl App {
             macro_repeat: "1".into(),
             recorder: recorder::Recorder::default(),
             macro_note: String::new(),
+            slot_choices: Vec::new(),
         };
+        app.rebuild_slot_choices();
         let _ = app.req.send(Request::Connect);
         app
     }
@@ -264,6 +268,12 @@ impl App {
             }
             Message::SwitchLayer(profile) => {
                 self.profile = profile;
+                // The same slot number means a different key on another
+                // profile, so nothing selected on the old one may stay armed:
+                // a picker click or a key press would otherwise write a slot of
+                // the profile the user is no longer looking at.
+                self.selected = None;
+                self.preview = None;
                 self.status = format!("switching to layer {}…", profile + 1);
                 self.send(Request::SetLayer(profile));
             }
@@ -347,7 +357,10 @@ impl App {
                     self.shown_fn = fn_layer;
                 }
             }
-            Event::Macros(m) => self.macros = m,
+            Event::Macros(m) => {
+                self.macros = m;
+                self.rebuild_slot_choices();
+            }
             Event::Status(s) => self.status = s,
             Event::Error(e) => self.status = format!("error: {e}"),
         }
@@ -419,14 +432,16 @@ impl App {
         self.send(Request::DeleteMacro(self.macro_slot));
     }
 
-    /// The slot picker's entries, each labelled with what the slot holds.
-    fn slot_choices(&self) -> Vec<SlotChoice> {
+    /// Rebuild the slot picker's entries, each labelled with what the slot
+    /// holds. Called when the stored macros change rather than from `view`:
+    /// formatting 50 labels on every message is wasted work.
+    fn rebuild_slot_choices(&mut self) {
         let stored: HashMap<u8, &str> = self
             .macros
             .iter()
             .map(|(slot, desc)| (*slot, desc.as_str()))
             .collect();
-        (0..MACRO_SLOTS)
+        self.slot_choices = (0..MACRO_SLOTS)
             .map(|i| SlotChoice {
                 index: i,
                 label: format!(
@@ -435,12 +450,14 @@ impl App {
                     shorten(stored.get(&i).copied().unwrap_or("empty"), 64)
                 ),
             })
-            .collect()
+            .collect();
     }
 
     fn subscription(&self) -> Subscription<Message> {
         let mut subs = vec![Subscription::run(event_stream).map(Message::Worker)];
-        if self.tab == Tab::Lighting {
+        // Only animate while the selected mode actually moves: a static mode
+        // would otherwise have the whole preview rebuilt 25 times a second.
+        if self.tab == Tab::Lighting && patterns::animates(&self.pattern_params()) {
             subs.push(
                 iced::time::every(std::time::Duration::from_millis(40)).map(|_| Message::Tick),
             );
@@ -554,6 +571,19 @@ impl App {
         section("Device".to_string(), grid.into())
     }
 
+    /// The preview parameters the lighting controls currently describe.
+    fn pattern_params(&self) -> patterns::Params {
+        patterns::Params {
+            mode: Mode::from_name(&self.mode).map(Mode::code).unwrap_or(1),
+            speed: self.speed,
+            brightness: self.brightness,
+            brightness_max: 4,
+            option: self.direction,
+            rainbow: self.rainbow,
+            rgb: color::parse_hex(&self.color).unwrap_or([0xff, 0x00, 0x00]),
+        }
+    }
+
     /// The lighting preview as a grid of coloured key widgets (a canvas would
     /// be cached by the renderer and would not animate).
     ///
@@ -561,16 +591,7 @@ impl App {
     /// inset by `pad`; positions are therefore exact and every row's right
     /// column lines up. A `row`-level spacing would accumulate per cell and
     /// drift the right column of rows that hold more keys.
-    fn preview_grid(&self, mode_code: u8, rgb: [u8; 3]) -> Element<'_, Message> {
-        let p = patterns::Params {
-            mode: mode_code,
-            speed: self.speed,
-            brightness: self.brightness,
-            brightness_max: 4,
-            option: self.direction,
-            rainbow: self.rainbow,
-            rgb,
-        };
+    fn preview_grid(&self, p: &patterns::Params) -> Element<'_, Message> {
         let frame = self.phase / (patterns::FRAME_MS / 1000.0);
         let unit = 52.0f32;
         let pad = 4.0f32;
@@ -598,7 +619,7 @@ impl App {
                     }
                     let x = (k.x + k.w / 2.0) / LK67_WIDTH;
                     let y = (k.y + k.h / 2.0) / LK67_HEIGHT;
-                    let c = patterns::color_at(&p, x, y, k.slot as usize, frame);
+                    let c = patterns::color_at(p, x, y, k.slot as usize, frame);
                     let radius = if k.knob { (unit - pad) / 2.0 } else { 5.0 };
                     let key = container(
                         text(glyph::legend(k.label))
@@ -635,12 +656,12 @@ impl App {
     }
 
     fn view_lighting(&self) -> Element<'_, Message> {
-        let rgb = color::parse_hex(&self.color).unwrap_or([0xff, 0x00, 0x00]);
+        let p = self.pattern_params();
+        let rgb = p.rgb;
         let tint = Color::from_rgb8(rgb[0], rgb[1], rgb[2]);
         let (hue, sat) = color::rgb_to_hs(rgb);
-        let mode_code = Mode::from_name(&self.mode).map(Mode::code).unwrap_or(1);
 
-        let preview = container(self.preview_grid(mode_code, rgb))
+        let preview = container(self.preview_grid(&p))
             .width(Length::Fill)
             .align_x(iced::Alignment::Center);
 
@@ -742,10 +763,12 @@ impl App {
             preview: self.preview.clone(),
             locked: &self.locked,
             fn_layer: self.shown_fn,
-            lighting: None,
         });
         let hint = match self.selected {
-            Some(slot) => format!("Slot {slot} — press a key on the board, or pick one below"),
+            Some(slot) => format!(
+                "Slot {slot} — {} — press a key on the board, or pick one below",
+                self.slot_edit
+            ),
             None => "Click a key above to select it".to_string(),
         };
         let layer_buttons: Vec<Element<Message>> = (0..self.layers.max(1))
@@ -833,7 +856,7 @@ impl App {
             .into()
         };
 
-        let choices = self.slot_choices();
+        let choices = self.slot_choices.clone();
         let selected = choices.get(self.macro_slot as usize).cloned();
         let meta = row![
             labeled(

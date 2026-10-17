@@ -11,6 +11,9 @@ use std::time::{Duration, Instant};
 
 use gamakay_core::macros::{MACRO_STREAM_MAX, MacroEvent};
 
+/// The note shown when the take no longer fits the slot.
+const MACRO_FULL: &str = "the macro is full";
+
 /// A key held while recording.
 #[derive(Debug, Clone)]
 struct Held {
@@ -72,6 +75,14 @@ impl Recorder {
         {
             return;
         }
+        // A press must leave room for its own release, so a take that can no
+        // longer hold a key's release does not take its press at all — that is
+        // what keeps the take from ending with a key down.
+        if !self.room_for(1, now) {
+            self.note = MACRO_FULL.into();
+            self.stop(now);
+            return;
+        }
         self.held.push(Held {
             key: key.clone(),
             location,
@@ -102,6 +113,10 @@ impl Recorder {
     }
 
     /// Stop, closing out any key still down.
+    ///
+    /// A release is always writable when this is called: [`Self::push`] only
+    /// accepts an event that leaves four bytes of room for every key the take
+    /// still holds, and this releases at most those keys.
     pub fn stop(&mut self, now: Instant) {
         if !self.recording {
             return;
@@ -140,34 +155,46 @@ impl Recorder {
         self.events.iter().map(MacroEvent::encoded_len).sum()
     }
 
-    /// Append one event, carrying the pause since the previous one.
-    fn push(&mut self, usage: u8, pressed: bool, now: Instant) {
-        // The pause before the first keystroke is the user reacting to having
-        // pressed Record, not part of the macro: a macro that waited it out
-        // would stall for seconds every time it ran.
+    /// Whether one more event fits, keeping four bytes of room for every key
+    /// the take would still hold after it (`open_after` is the held count once
+    /// the event has landed). Every open key needs a release of at most four
+    /// bytes, so holding that room back is what guarantees the take can always
+    /// be closed out — and therefore never ends with a key down.
+    fn room_for(&self, open_after: isize, now: Instant) -> bool {
+        let open = open_after.max(0) as usize;
+        let len = if (1..=127).contains(&self.delay_ms(now)) {
+            2
+        } else {
+            4
+        };
+        self.used_bytes() + len + 4 * open <= MACRO_STREAM_MAX
+    }
+
+    /// The delay the next event would carry: the pause since the previous one.
+    /// The pause before the *first* keystroke is the user reacting to having
+    /// pressed Record, not part of the macro, so it is dropped — a macro that
+    /// waited it out would stall for seconds every time it ran.
+    fn delay_ms(&self, now: Instant) -> u16 {
         let paused = if self.events.is_empty() {
             Duration::ZERO
         } else {
             now.duration_since(self.last.unwrap_or(now))
         };
-        self.last = Some(now);
         // A zero delay is encoded in the four-byte long form, so round it up:
         // back-to-back events are the common case and 1 ms is not observable.
-        let delay_ms = (paused.as_millis().min(u128::from(u16::MAX)) as u16).max(1);
-        let event = MacroEvent::Key {
+        (paused.as_millis().min(u128::from(u16::MAX)) as u16).max(1)
+    }
+
+    /// Append one event, carrying the pause since the previous one. The caller
+    /// has checked [`Self::room_for`].
+    fn push(&mut self, usage: u8, pressed: bool, now: Instant) {
+        let delay_ms = self.delay_ms(now);
+        self.last = Some(now);
+        self.events.push(MacroEvent::Key {
             usage,
             pressed,
             delay_ms,
-        };
-        if self.used_bytes() + event.encoded_len() > MACRO_STREAM_MAX {
-            // Stop now rather than let the user record a take the slot will
-            // refuse to store.
-            self.recording = false;
-            self.held.clear();
-            self.note = format!("macro full ({MACRO_STREAM_MAX} bytes)");
-            return;
-        }
-        self.events.push(event);
+        });
     }
 }
 
@@ -387,14 +414,88 @@ mod tests {
             r.up(&k, iced::keyboard::Location::Standard, at(t0, i * 10));
         }
         assert!(!r.is_recording());
-        assert_eq!(r.note(), format!("macro full ({MACRO_STREAM_MAX} bytes)"));
+        assert_eq!(r.note(), MACRO_FULL);
         assert!(r.used_bytes() <= MACRO_STREAM_MAX);
+        assert!(!r.events().is_empty());
         let m = Macro {
             repeat: 1,
             events: take(&r),
         };
         assert!(m.to_blob().is_ok());
         assert_eq!(m.stream_len(), r.used_bytes());
+    }
+
+    /// The regression this guards: a take that runs out of room used to drop
+    /// its held keys without releasing them, so a macro could be saved that
+    /// ends with a key down — and the board would hold that key on every run.
+    #[test]
+    fn a_full_take_never_ends_with_a_key_down() {
+        let t0 = Instant::now();
+        let mut r = Recorder::default();
+        r.start(t0);
+        for i in 0..200u64 {
+            let k = key(&format!("k{i}"));
+            r.down(
+                Some(0x04),
+                &k,
+                iced::keyboard::Location::Standard,
+                at(t0, i * 10),
+            );
+            r.up(&k, iced::keyboard::Location::Standard, at(t0, i * 10));
+        }
+        assert_eq!(
+            r.events().last(),
+            Some(&MacroEvent::Key {
+                usage: 0x04,
+                pressed: false,
+                delay_ms: 1,
+            })
+        );
+    }
+
+    /// A key still held when the slot fills up is closed out, not dropped.
+    #[test]
+    fn a_full_take_closes_out_the_key_it_is_holding() {
+        let t0 = Instant::now();
+        let mut r = Recorder::default();
+        r.start(t0);
+        // Fill the take with a held key in flight: press it, then feed enough
+        // complete pairs that the next press cannot fit.
+        let held = key("held");
+        r.down(
+            Some(0x04),
+            &held,
+            iced::keyboard::Location::Standard,
+            at(t0, 0),
+        );
+        for i in 0..200u64 {
+            let k = key(&format!("k{i}"));
+            r.down(
+                Some(0x04),
+                &k,
+                iced::keyboard::Location::Standard,
+                at(t0, i * 10),
+            );
+            r.up(&k, iced::keyboard::Location::Standard, at(t0, i * 10));
+        }
+        assert!(!r.is_recording());
+        assert!(r.used_bytes() <= MACRO_STREAM_MAX);
+        // Every press in the take has a release after it.
+        let mut open = 0i32;
+        for e in r.events() {
+            match *e {
+                MacroEvent::Key { pressed: true, .. } => open += 1,
+                MacroEvent::Key { pressed: false, .. } => open -= 1,
+                _ => {}
+            }
+            assert!(open >= 0, "a release with no press");
+        }
+        assert_eq!(open, 0, "the take ends with a key still down");
+        let m = Macro {
+            repeat: 1,
+            events: take(&r),
+        };
+        assert!(m.to_blob().is_ok());
     }
 
     #[test]

@@ -69,7 +69,7 @@ pub enum SlotValue {
     Consumer(u16),
     /// A macro binding: `[mode, index, 0]`; mode 0 repeat, 1 toggle, 2 hold.
     Macro { mode: u8, index: u8 },
-    /// A special function: 1 Fn, 12 power save, 17 Caps LED swap.
+    /// A special function: 1 Fn, 12 backlight on/off, 17 Caps LED swap.
     Special(u8),
     /// A firmware action (tag `0x0D`): the lighting controls the firmware runs
     /// itself. `a` is the parameter, `b` how to move it.
