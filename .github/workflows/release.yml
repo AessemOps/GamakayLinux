@@ -92,41 +92,53 @@ jobs:
   arch:
     needs: guard
     runs-on: ubuntu-latest
-    container: archlinux:latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build the package
+      - name: Build the package in an Arch container
         run: |-
-          pacman -Syu --noconfirm base-devel git rust cargo
-          # makepkg refuses to run as root; build as an unprivileged user.
-          useradd -m builder
-          # The PKGBUILD sources the release tarball; in CI the working tree is
-          # the source of truth, so package it under the name the PKGBUILD wants.
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
-          mkdir -p "/tmp/src/gamakaylinux-$version"
-          git archive HEAD | tar -x -C "/tmp/src/gamakaylinux-$version"
-          tar -czf "/tmp/src/gamakaylinux-$version.tar.gz" -C /tmp/src "gamakaylinux-$version"
-          chown -R builder /tmp/src
-          install -d -o builder -g builder /home/builder/pkg
-          install -o builder -g builder -m644 packaging/arch/PKGBUILD packaging/arch/gamakaylinux.install /home/builder/pkg/
-          install -o builder -g builder -m644 "/tmp/src/gamakaylinux-$version.tar.gz" /home/builder/pkg/
-          su builder -c 'cd ~/pkg && makepkg -f --noconfirm'
-          cp /home/builder/pkg/*.pkg.tar.zst .
-          ls -l ./*.pkg.tar.zst
+          # The PKGBUILD sources the published tag tarball. A tag does not exist
+          # yet at this point, so synthesise the same tarball from the checkout —
+          # it is also what makes this workflow usable before a release. The
+          # checkout stays on the host (a `container:` job checks out without
+          # .git, and `git archive` needs it).
+          rm -rf /tmp/src && mkdir -p "/tmp/src/gamakaylinux-$version"
+          cp -a . "/tmp/src/gamakaylinux-$version"
+          tar -czf "/tmp/src/gamakaylinux-$version.tar.gz" -C /tmp/src \
+            --exclude=.git --exclude=target --exclude=dist "gamakaylinux-$version"
+          mkdir -p out
+          docker run --rm -v /tmp/src:/src:ro -v "$PWD/out:/out" -w /src archlinux:latest \
+            bash -euo pipefail -c '
+              pacman -Syu --noconfirm --needed base-devel git rust cargo >/dev/null
+              # makepkg refuses to run as root; build as an unprivileged user in
+              # a writable copy.
+              useradd -m builder
+              install -d -o builder -g builder /home/builder/pkg
+              install -o builder -g builder -m644 /src/gamakaylinux-*.tar.gz /home/builder/pkg/
+              install -o builder -g builder -m644 \
+                /src/gamakaylinux-*/packaging/arch/PKGBUILD \
+                /src/gamakaylinux-*/packaging/arch/gamakaylinux.install /home/builder/pkg/
+              su builder -c "cd ~/pkg && makepkg -f --noconfirm"
+              install -m644 /home/builder/pkg/*.pkg.tar.zst /out/
+            '
+          ls -l out
 
       - name: Install and run it
         run: |-
-          pacman -U --noconfirm ./*.pkg.tar.zst
-          gamakay --version
-          gamakay list
-          test -f /usr/share/applications/gamakay.desktop
-          test -f /usr/share/icons/hicolor/256x256/apps/gamakay.png
-          test -f /usr/lib/udev/rules.d/70-gamakay.rules
+          docker run --rm -v "$PWD/out:/out:ro" archlinux:latest bash -euo pipefail -c '
+            pacman -Syu --noconfirm --needed >/dev/null
+            pacman -U --noconfirm /out/*.pkg.tar.zst
+            gamakay --version
+            gamakay list
+            test -f /usr/share/applications/gamakay.desktop
+            test -f /usr/share/icons/hicolor/256x256/apps/gamakay.png
+            test -f /usr/lib/udev/rules.d/70-gamakay.rules
+          '
 
       - uses: actions/upload-artifact@v4
         with:
           name: arch
-          path: ./*.pkg.tar.zst
+          path: out/*.pkg.tar.zst
 
   verify-deb:
     needs: build
