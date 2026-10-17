@@ -39,6 +39,13 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.1.1" date="2026-10-18">
+      <description>
+        <p>The window now announces its application id, so a desktop shell
+           associates the running app with its launcher entry and shows its
+           icon instead of a generic one.</p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-10-17">
       <description>
         <p>First release: lighting, keymaps, macros, the GUI and CLI, and packages

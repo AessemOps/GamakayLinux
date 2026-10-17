@@ -4,6 +4,28 @@ All notable changes to this project. Version numbers are the tags; the workspace
 `Cargo.toml` version is the source of truth and `scripts/check-release-version.sh`
 keeps the PKGBUILD in step with it.
 
+## 0.1.1 — 2026-10-18
+
+**Fixed: the app has its icon now.** Every package already installed the icons
+(8 hicolor sizes, the same PNG the AppImage uses) — what was missing was the link
+between the *running window* and the desktop entry. iced sets a window's
+application id only when the application asks, so `WM_CLASS` was empty and a
+desktop shell had nothing to match `gamakay.desktop` against: the taskbar showed
+a generic icon and the window did not group under its launcher entry. The window
+now announces `application_id = "gamakay"`, matching the desktop file's basename
+as iced documents, which is `WM_CLASS` on X11 and the app id on Wayland.
+
+Verified on the hardware: `WM_CLASS` went from `"", ""` to
+`"gamakay", "gamakay"`, with the window geometry unchanged.
+
+**Packaging and CI.** The Arch job builds from the *published* archive — the
+bytes the PKGBUILD's `sha256sums` pins, and the bytes a user builds from — rather
+than a tarball synthesised from the checkout, whose different gzip and metadata
+made the checksum fail. Versions that are not tagged yet still synthesise one,
+with the checksum skipped. A guard step now compares the pinned hash against the
+published archive, so a stale or wrong hash fails in CI instead of for a user;
+while the hash is still `SKIP` (it cannot exist before the tag does) it warns.
+
 ## 0.1.0 — 2026-10-17
 
 First release. Configure a GamaKay LK67 from Linux over USB, with a GUI and a

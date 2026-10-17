@@ -53,8 +53,16 @@ jobs:
           fi
           pinned="$(sed -n "s/^sha256sums=('\\([0-9a-f]\\{64\\}\\)').*/\\1/p" packaging/arch/PKGBUILD)"
           actual="$(curl -fsSL "https://github.com/AessemOps/GamakayLinux/archive/v$version.tar.gz" | sha256sum | cut -d' ' -f1)"
-          echo "pinned: $pinned"
+          echo "pinned: ${pinned:-<SKIP>}"
           echo "actual: $actual"
+          if [ -z "$pinned" ]; then
+            # A version whose hash has not been filled in yet. GitHub generates
+            # the archive from the tag, so this is the normal state between
+            # tagging and running updpkgsums — warn, do not fail, or no release
+            # could ever pass this guard.
+            echo "::warning::PKGBUILD sha256sums is still SKIP for the published v$version; run updpkgsums and commit it"
+            exit 0
+          fi
           if [ "$pinned" != "$actual" ]; then
             echo "::error::PKGBUILD sha256sums does not match the v$version archive; regenerate it with updpkgsums"
             exit 1
