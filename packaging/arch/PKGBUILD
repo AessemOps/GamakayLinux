@@ -20,14 +20,18 @@ depends=('libxkbcommon' 'wayland' 'libx11' 'libxcursor' 'libxi' 'libxrandr'
          'vulkan-icd-loader' 'libglvnd' 'ttf-dejavu')
 makedepends=('cargo' 'rust')
 install="$pkgname.install"
+# No split debug package: makepkg's `debug` option would emit
+# $pkgname-debug alongside the package, and that is a distribution's job, not a
+# release asset's.
+options=('!debug')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
 # GitHub's archive extracts to the *repository* name, not $pkgname.
 _archive="GamakayLinux-$pkgver"
-# !! Filled in by `updpkgsums` (or `makepkg -g`) immediately after the tag is
-# pushed: the tarball cannot be hashed before it exists. The release workflow
-# prints the correct value in its run summary. Until then this is the only
-# package here without source verification.
-sha256sums=('SKIP')
+# The v0.1.0 tag's tarball, as GitHub serves it. Note this is GitHub's own
+# archive, not the one the release workflow synthesises for its CI build, so
+# its hash has to come from the published tarball (`updpkgsums`, or
+# `curl -L .../archive/v$pkgver.tar.gz | sha256sum`). Bump it with the version.
+sha256sums=('600d86974cc39aa97bfa2632baf8c566287fa459451b569a96db40ac3586dbec')
 
 prepare() {
   cd "$_archive"
