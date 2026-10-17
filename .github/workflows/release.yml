@@ -44,6 +44,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: The PKGBUILD's pinned checksum matches the published archive
+        run: |-
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          if ! git ls-remote --tags --exit-code origin "v$version" >/dev/null 2>&1; then
+            echo "v$version is not published yet; nothing to verify"
+            exit 0
+          fi
+          pinned="$(sed -n "s/^sha256sums=('\\([0-9a-f]\\{64\\}\\)').*/\\1/p" packaging/arch/PKGBUILD)"
+          actual="$(curl -fsSL "https://github.com/AessemOps/GamakayLinux/archive/v$version.tar.gz" | sha256sum | cut -d' ' -f1)"
+          echo "pinned: $pinned"
+          echo "actual: $actual"
+          if [ "$pinned" != "$actual" ]; then
+            echo "::error::PKGBUILD sha256sums does not match the v$version archive; regenerate it with updpkgsums"
+            exit 1
+          fi
+
       - name: Tag, Cargo and PKGBUILD versions must agree
         run: |-
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
@@ -121,27 +137,46 @@ jobs:
       - name: Build the package in an Arch container
         run: |-
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
-          # The PKGBUILD sources the published tag tarball. A tag does not exist
-          # yet at this point, so synthesise the same tarball from the checkout —
-          # it is also what makes this workflow usable before a release. The
-          # checkout stays on the host (a `container:` job checks out without
-          # .git, and `git archive` needs it).
-          # Build the tarball straight from the working tree and mount *only*
-          # it: an earlier version copied the checkout — including the .git that
-          # holds the checkout credential — into the container.
-          #
-          # The prefix must be what GitHub puts in the tarball it serves for a
-          # tag: the *repository* name, "GamakayLinux-<version>". Naming the
-          # directory anything else is what let a broken PKGBUILD pass CI.
+          url="https://github.com/AessemOps/GamakayLinux"
           rm -rf /tmp/src && mkdir -p /tmp/src
-          git archive --prefix="GamakayLinux-$version/" HEAD \
-            | gzip -9 > "/tmp/src/gamakaylinux-$version.tar.gz"
-          # The PKGBUILD cannot carry this hash before the tag exists, so print
-          # it where the release notes are written: paste it into
-          # packaging/arch/PKGBUILD and push.
-          echo "PKGBUILD sha256sums: $(sha256sum "/tmp/src/gamakaylinux-$version.tar.gz" | cut -d' ' -f1)" \
-            | tee -a "$GITHUB_STEP_SUMMARY"
-          mkdir -p out
+          # Prefer the *published* archive for this version: those are the exact
+          # bytes the PKGBUILD's sha256sums pins, and the bytes a user builds
+          # from. A version that has not been tagged yet has no archive, so
+          # synthesise one from the checkout instead — and then the checksum has
+          # to be skipped, because the pinned hash is for the published bytes,
+          # which differ (different gzip, different metadata).
+          #
+          # The synthetic prefix must be what GitHub uses ("GamakayLinux-<v>",
+          # the repository name) or the PKGBUILD's `cd` fails; that mistake is
+          # what let a broken PKGBUILD pass CI once.
+          if [ -z "${GITHUB_REF_TYPE:-}" ] || [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            if curl -fsSL -o "/tmp/src/gamakaylinux-$version.tar.gz" \
+                "$url/archive/v$version.tar.gz"; then
+              echo "using the published v$version archive" | tee -a "$GITHUB_STEP_SUMMARY"
+              checksum_arg=""
+            else
+              echo "no published v$version archive; synthesising the source tarball" | tee -a "$GITHUB_STEP_SUMMARY"
+              git archive --prefix="GamakayLinux-$version/" HEAD \
+                | gzip -9 > "/tmp/src/gamakaylinux-$version.tar.gz"
+              checksum_arg="--skipchecksums"
+            fi
+          else
+            # On a tag the archive must exist; let makepkg enforce the checksum.
+            curl -fsSL -o "/tmp/src/gamakaylinux-$version.tar.gz" \
+              "$url/archive/v$version.tar.gz"
+            checksum_arg=""
+          fi
+          docker run --rm -v /tmp/src:/src:ro -v "$PWD/out:/out" -w /src archlinux@sha256:3c64b538588416593f69a1aebd2f2ec0f2541b29159f32556fa7def2167147a0 \
+            bash -euo pipefail -c "
+              pacman -Syu --noconfirm --needed base-devel git rust cargo >/dev/null
+              useradd -m builder
+              install -d -o builder -g builder /home/builder/pkg
+              install -o builder -g builder -m644 /src/gamakaylinux-*.tar.gz /home/builder/pkg/
+              su builder -c \"cd ~/pkg && tar xzf gamakaylinux-*.tar.gz --wildcards 'GamakayLinux-*/packaging/arch/*' && install -m644 GamakayLinux-*/packaging/arch/PKGBUILD GamakayLinux-*/packaging/arch/gamakaylinux.install . && makepkg -f --noconfirm --nodeps $checksum_arg\"
+              install -m644 /home/builder/pkg/*.pkg.tar.zst /out/
+            "
+          ls -l out
+
           docker run --rm -v /tmp/src:/src:ro -v "$PWD/out:/out" -w /src archlinux@sha256:3c64b538588416593f69a1aebd2f2ec0f2541b29159f32556fa7def2167147a0 \
             bash -euo pipefail -c '
               pacman -Syu --noconfirm --needed base-devel git rust cargo >/dev/null
