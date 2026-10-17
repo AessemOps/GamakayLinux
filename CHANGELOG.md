@@ -26,9 +26,11 @@ moved to `.title(..)`), `horizontal_space` became `space::horizontal`,
 `align_x`/`align_y`. Two dependency counts support the change: 417 crates in the
 lock, down from 475.
 
-The declared MSRV rises to **1.88** (iced 0.14 declares it), which also lets the
-code use let chains again — the three MSRV workarounds from the previous pass are
-gone.
+The declared MSRV rises to **1.90**, which is more than iced 0.14's own 1.88:
+two crates in its tree need it (`ordered-float` 5.5 wants 1.90, `uuid` 1.28 wants
+1.89), and the CI job `cargo check`s on exactly the declared version so it cannot
+drift. That also lets the code use let chains again — the three MSRV workarounds
+from the previous pass are gone.
 
 ## 0.1.0 — 2026-10-17
 

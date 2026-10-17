@@ -10,9 +10,10 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-# 1.88, not 1.86: iced 0.14 declares it. The Wayland stack alone would need
-# 1.86. `cargo check` on 1.88 is a CI job.
-rust-version = "1.88"
+# 1.90, not 1.88: iced 0.14 declares 1.88, but two crates in its tree need
+# more — ordered-float 5.5 wants 1.90 and uuid 1.28 wants 1.89. `cargo check` on
+# 1.90 is a CI job, so this cannot drift.
+rust-version = "1.90"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/AessemOps/GamakayLinux"
 authors = ["GamakayLinux contributors"]
