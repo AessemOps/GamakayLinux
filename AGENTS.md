@@ -9,9 +9,10 @@ implementation plan is `.kilo/plans/1792003709046-gamakay-linux-rust-app.md`.
 ## What this is
 
 A Linux-native Rust replacement for the GamaKay keyboard driver app, for the
-**GamaKay LK67**. It configures the board over USB, the 2.4 GHz dongle and
-Bluetooth by writing settings to the keyboard's own memory, then exits — no
-resident process. It speaks the ROYUAN `yc500` protocol over Linux **hidraw**
+**GamaKay LK67**. It configures the board over its **USB cable** by writing
+settings to the keyboard's own memory, then exits — no resident process.
+(2.4 GHz and Bluetooth are out of scope: see `docs/protocol.md`, "Scope: USB
+cable".) It speaks the ROYUAN `yc500` protocol over Linux **hidraw**
 directly (no libusb, no libudev), so the kernel driver stays bound and the
 keyboard keeps typing while it is configured.
 
@@ -34,7 +35,7 @@ guard refuses a block-list of destructive and bootloader opcodes by name.
 
 ## Commands
 
-There is no `make test`; run the gates directly.
+`make check` runs the whole gate; the individual steps are below.
 
 ```bash
 cargo build --release            # gamakay: LTO, stripped, panic=abort
@@ -144,9 +145,9 @@ gamakay keymap set --slot 20 --to macro:0   # bind macro 0 to a key
 - Identity is the `0x8F` handshake id, which is firmware-dependent: the LK67
   reports **290** on the 2026-10 firmware and **149** before it (the
   mismatched-firmware variant reports **71**). Never identify by VID/PID:
-  hundreds of boards share `1121:4002` / `3151:4002`.
-- The 2.4 GHz dongle VID/PID and the Bluetooth HID descriptor are **open
-  items**; do not assume a dongle relays every command. Bluetooth HOGP reaches
-  us as hidraw through `uhid`.
+  hundreds of boards share `1121:4002` / `3151:4003`.
+- 2.4 GHz and Bluetooth are **out of scope**, with the evidence recorded in
+  `docs/protocol.md` → "Scope: USB cable". Do not re-add a transport without
+  reading that first.
 - `/dev/hidraw*` is root-only by default; `make udev-install` grants the
-  active user access via `TAG+="uaccess"` (the rule covers both USB ids).
+  active user access via `TAG+="uaccess"` (the rule covers both cable ids).

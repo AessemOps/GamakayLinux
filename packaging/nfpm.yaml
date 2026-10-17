@@ -1,0 +1,119 @@
+# deb and rpm for GamakayLinux, from one file (nfpm).
+#
+#   VERSION=0.1.0 nfpm package --packager deb --config packaging/nfpm.yaml --target dist/
+#   VERSION=0.1.0 nfpm package --packager rpm --config packaging/nfpm.yaml --target dist/
+#
+# VERSION and ARCH come from the environment; the Makefile derives VERSION from
+# the workspace Cargo.toml, which `scripts/check-release-version.sh` keeps in
+# step with the PKGBUILD and the release tag.
+name: gamakaylinux
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+section: utils
+priority: optional
+maintainer: GamakayLinux contributors
+vendor: GamakayLinux
+homepage: https://github.com/AessemOps/GamakayLinux
+license: GPL-3.0-or-later
+description: |
+  Configure the GamaKay LK67 keyboard from Linux, over its USB cable.
+
+  Lighting, the base and Fn keymaps, macros and device info are written straight
+  to the keyboard's own memory, so nothing stays resident. A graphical front-end
+  (gamakay-gui) and a command line tool (gamakay) are included.
+
+  Read-only use works without elevated rights on many systems; to configure
+  without root, install the shipped udev rule (see the README).
+
+contents:
+  - src: target/release/gamakay
+    dst: /usr/bin/gamakay
+  - src: target/release/gamakay-gui
+    dst: /usr/bin/gamakay-gui
+  - src: packaging/udev/70-gamakay.rules
+    dst: /usr/lib/udev/rules.d/70-gamakay.rules
+  - src: packaging/gamakay.desktop
+    dst: /usr/share/applications/gamakay.desktop
+  - src: packaging/icons/hicolor/16x16/apps/gamakay.png
+    dst: /usr/share/icons/hicolor/16x16/apps/gamakay.png
+  - src: packaging/icons/hicolor/24x24/apps/gamakay.png
+    dst: /usr/share/icons/hicolor/24x24/apps/gamakay.png
+  - src: packaging/icons/hicolor/32x32/apps/gamakay.png
+    dst: /usr/share/icons/hicolor/32x32/apps/gamakay.png
+  - src: packaging/icons/hicolor/48x48/apps/gamakay.png
+    dst: /usr/share/icons/hicolor/48x48/apps/gamakay.png
+  - src: packaging/icons/hicolor/64x64/apps/gamakay.png
+    dst: /usr/share/icons/hicolor/64x64/apps/gamakay.png
+  - src: packaging/icons/hicolor/128x128/apps/gamakay.png
+    dst: /usr/share/icons/hicolor/128x128/apps/gamakay.png
+  - src: packaging/icons/hicolor/256x256/apps/gamakay.png
+    dst: /usr/share/icons/hicolor/256x256/apps/gamakay.png
+  - src: packaging/io.github.aessemops.gamakaylinux.metainfo.xml
+    dst: /usr/share/metainfo/io.github.aessemops.gamakaylinux.metainfo.xml
+  - src: packaging/icons/hicolor/512x512/apps/gamakay.png
+    dst: /usr/share/icons/hicolor/512x512/apps/gamakay.png
+  # Licences: the two formats keep them in different places.
+  - src: LICENSE
+    dst: /usr/share/doc/gamakaylinux/copyright
+    packager: deb
+  - src: CREDITS.md
+    dst: /usr/share/doc/gamakaylinux/CREDITS.md
+    packager: deb
+  - src: README.md
+    dst: /usr/share/doc/gamakaylinux/README.md
+    packager: deb
+  - src: CHANGELOG.md
+    dst: /usr/share/doc/gamakaylinux/CHANGELOG.md
+    packager: deb
+  # The bundled emoji font is OFL-1.1, which requires its licence to travel
+  # with it.
+  - src: crates/gamakay-gui/assets/NotoEmoji-OFL.txt
+    dst: /usr/share/doc/gamakaylinux/NotoEmoji-OFL.txt
+    packager: deb
+  - src: LICENSE
+    dst: /usr/share/licenses/gamakaylinux/LICENSE
+    packager: rpm
+  - src: CREDITS.md
+    dst: /usr/share/licenses/gamakaylinux/CREDITS.md
+    packager: rpm
+  - src: README.md
+    dst: /usr/share/doc/gamakaylinux/README.md
+    packager: rpm
+  - src: CHANGELOG.md
+    dst: /usr/share/doc/gamakaylinux/CHANGELOG.md
+    packager: rpm
+  - src: crates/gamakay-gui/assets/NotoEmoji-OFL.txt
+    dst: /usr/share/licenses/gamakaylinux/NotoEmoji-OFL.txt
+    packager: rpm
+
+# The GUI loads its display, input and GPU stack with dlopen at runtime, so `ldd`
+# shows only libc: these are the libraries it needs to find, named per format.
+overrides:
+  deb:
+    depends:
+      - libc6
+      - libxkbcommon0
+      - libwayland-client0
+      - libx11-6
+      - libxcursor1
+      - libxi6
+      - libxrandr2
+      - libvulkan1
+      - libglvnd0
+      - fonts-dejavu-core
+  rpm:
+    depends:
+      - glibc
+      - libxkbcommon
+      - libwayland-client
+      - libX11
+      - libXcursor
+      - libXi
+      - libXrandr
+      - vulkan-loader
+      - libglvnd
+      - dejavu-sans-fonts
+
+scripts:
+  postinstall: packaging/scripts/postinstall.sh

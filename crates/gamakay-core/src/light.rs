@@ -12,7 +12,11 @@
 
 use crate::cmd;
 use crate::error::{Error, Result};
-use crate::packet::{Checksum, REPORT_LEN, packet};
+use crate::packet::Checksum;
+#[cfg(test)]
+use crate::packet::REPORT_LEN;
+#[cfg(test)]
+use crate::packet::packet;
 use crate::transport::Session;
 
 /// Backlight modes, wire numbers, shared by the family. Modes that need
@@ -187,6 +191,11 @@ impl LedParam {
     }
 
     /// Backlight is a Bit8 packet with the speed inverted on the wire.
+    ///
+    /// Test-only: the shipped paths build the payload and let `Session` send it
+    /// through the safety guard, and a second packet-producing API would be a
+    /// way around that.
+    #[cfg(test)]
     pub fn backlight_packet(&self, flags: FlagsPair) -> Result<[u8; REPORT_LEN]> {
         packet(
             cmd::SET_LEDPARAM,
@@ -195,7 +204,9 @@ impl LedParam {
         )
     }
 
-    /// Edge light is the same layout; speed is not inverted.
+    /// Edge light is the same layout; speed is not inverted. Test-only, as
+    /// [`Self::backlight_packet`].
+    #[cfg(test)]
     pub fn edge_packet(&self, flags: FlagsPair) -> Result<[u8; REPORT_LEN]> {
         packet(
             cmd::SET_SLEDPARAM,

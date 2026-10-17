@@ -72,8 +72,10 @@ CREDITS.md, LICENSE, README.md, .gitignore (vendor/, *.pcapng)
 21. Event-driven only. Watch hotplug with inotify on `/dev` while the window is open. Query the battery on demand, or every 60 s at most while visible. No timers or redraws when idle. Device I/O runs on a worker thread.
 22. Unsupported features for the current transport (from the matrix) are disabled with an explanation.
 
-### Phase 6: Packaging and docs
-23. PKGBUILD (installs the binaries, udev rule and .desktop file). README covering setup, udev and the transport matrix, plus CREDITS.
+### Phase 6: Packaging and docs — **done (0.1.0)**
+23. Packages for Arch, Debian/Ubuntu, Fedora/RHEL and an AppImage, built and
+    installed per distribution in CI; README rewritten; CREDITS and CHANGELOG
+    current. See `.kilo/plans/1792200000000-phase-6-packaging.md`.
 
 ### Phase 7 (v2, optional): `gamakay daemon`
 24. Opt-in, cable only, host-streamed per-key frames. Off by default and never auto-started.

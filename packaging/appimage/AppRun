@@ -1,0 +1,38 @@
+#!/bin/sh
+# AppRun: one AppImage, two entry points.
+#
+#   (no arguments)            the GUI
+#   --gui [args]              the GUI, with arguments (e.g. --gui keymap)
+#   --cli [args]              the CLI
+#   an option or a known CLI subcommand -> the CLI
+#
+# Anything option-like goes to the CLI so that `--version` and `--help` answer
+# and exit instead of opening a window that ignores them. One word is genuinely
+# ambiguous: `info` is both a CLI subcommand and a GUI tab, and the CLI wins;
+# use `--gui info` for the tab. Keeping the CLI reachable is what makes the
+# AppImage testable on a machine with no display.
+set -e
+
+here="$(dirname "$(readlink -f "$0")")"
+export APPDIR="$here"
+export PATH="$here/usr/bin:$PATH"
+
+case "${1:-}" in
+    "")
+        exec "$here/usr/bin/gamakay-gui"
+        ;;
+    --gui)
+        shift
+        exec "$here/usr/bin/gamakay-gui" "$@"
+        ;;
+    --cli)
+        shift
+        exec "$here/usr/bin/gamakay" "$@"
+        ;;
+    -* | list | info | light | keymap | macro | apply)
+        exec "$here/usr/bin/gamakay" "$@"
+        ;;
+    *)
+        exec "$here/usr/bin/gamakay-gui" "$@"
+        ;;
+esac

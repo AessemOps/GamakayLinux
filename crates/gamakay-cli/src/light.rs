@@ -9,7 +9,7 @@ use gamakay_core::light::{EdgeMode, LK67_FLAGS, LedParam, LedState, Mode};
 use gamakay_core::transport::Session;
 use gamakay_hidraw::HidrawDevice;
 
-use crate::{Cli, select_device};
+use crate::{Cli, check_writable, select_device};
 
 #[derive(Subcommand)]
 pub enum LightCmd {
@@ -105,7 +105,7 @@ fn show(cli: &Cli) -> Result<()> {
 
 /// Presence of an edge light is a property of the board, not of a GET reply:
 /// the firmware answers `0x88` even when no edge LEDs are fitted.
-fn board_has_edge(s: &mut Session<'_>) -> bool {
+pub(crate) fn board_has_edge(s: &mut Session<'_>) -> bool {
     s.device_id()
         .ok()
         .and_then(gamakay_core::device::by_id)
@@ -117,6 +117,7 @@ fn set_backlight(cli: &Cli, args: &LightArgs) -> Result<()> {
     let info = select_device(cli)?;
     let mut dev = HidrawDevice::open(&info.path)?;
     let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
+    check_writable(cli, &mut s)?;
     let cur = s.led_param()?;
     let p = merge(&cur, args, false)?;
     s.set_backlight(&p, LK67_FLAGS)?;
@@ -134,6 +135,7 @@ fn set_edge(cli: &Cli, args: &LightArgs) -> Result<()> {
     let info = select_device(cli)?;
     let mut dev = HidrawDevice::open(&info.path)?;
     let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
+    check_writable(cli, &mut s)?;
     if !board_has_edge(&mut s) && !cli.force {
         bail!("this board has no edge light (pass --force to try anyway)");
     }
@@ -154,6 +156,7 @@ fn toggle_backlight(cli: &Cli, off: bool) -> Result<()> {
     let info = select_device(cli)?;
     let mut dev = HidrawDevice::open(&info.path)?;
     let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
+    check_writable(cli, &mut s)?;
     let o = s.set_backlight_off(off)?;
     if cli.dry_run {
         for pkt in s.withheld() {
@@ -172,19 +175,13 @@ pub(crate) fn merge(cur: &LedState, args: &LightArgs, edge: bool) -> Result<LedP
         Some(m) => resolve_mode(m, edge)?,
         None => cur.mode,
     };
-    if let Some(b) = args.brightness
-        && b > 4
-    {
+    if let Some(b) = args.brightness.filter(|b| *b > 4) {
         bail!("brightness {b} is out of range (0..4)");
     }
-    if let Some(sp) = args.speed
-        && sp > 4
-    {
+    if let Some(sp) = args.speed.filter(|sp| *sp > 4) {
         bail!("speed {sp} is out of range (0..4)");
     }
-    if let Some(d) = args.direction
-        && d > 3
-    {
+    if let Some(d) = args.direction.filter(|d| *d > 3) {
         bail!("direction {d} is out of range (0..3)");
     }
     Ok(LedParam {
@@ -212,7 +209,20 @@ fn resolve_mode(s: &str, edge: bool) -> Result<u8> {
         return Ok(m);
     }
     if let Ok(n) = s.trim().parse::<u8>() {
-        return Ok(n);
+        // A numeric code is only accepted when it names a mode the board
+        // implements: writing an arbitrary byte is a silent misconfiguration.
+        let known = if edge {
+            EdgeMode::from_code(n).is_some()
+        } else {
+            Mode::from_code(n).is_some()
+        };
+        if known {
+            return Ok(n);
+        }
+        bail!(
+            "unknown {} mode code {n} (this firmware implements 1..=25)",
+            if edge { "edge" } else { "backlight" }
+        );
     }
     if edge {
         bail!("unknown edge mode {s:?} (try: off, static, breathing, neon, wave, snake)")

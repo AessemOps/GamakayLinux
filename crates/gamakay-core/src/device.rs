@@ -94,6 +94,10 @@ pub const LK67: DeviceRecord = DeviceRecord {
     ],
 };
 
+/// Profiles (onboard key layers) the LK67 stores. The keymap commands address
+/// the *active* one, so this bounds what can be selected.
+pub const PROFILES: u8 = 8;
+
 /// USB ids the LK67 used before the 2026-10 firmware update. `by_usb` matches
 /// these too, so a pre-update board is still recognised.
 pub const LK67_LEGACY_USB: &[(u16, u16)] = &[(0x0461, 0x4002)];

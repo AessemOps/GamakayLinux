@@ -54,6 +54,14 @@ pub fn packet(opcode: u8, payload: &[u8], mode: Checksum) -> Result<[u8; REPORT_
     if payload.len() > REPORT_LEN - 1 {
         return Err(Error::PayloadTooLong { len: payload.len() });
     }
+    // The checksum lands *inside* the report (byte 7 for Bit7, byte 8 for Bit8).
+    // A payload that reaches that byte must leave it zero, or writing the
+    // checksum would silently drop the payload byte sitting there.
+    if let Some(at) = mode.at() {
+        if payload.get(at - 1).is_some_and(|b| *b != 0) {
+            return Err(Error::PayloadTooLong { len: payload.len() });
+        }
+    }
     let mut buf = [0u8; REPORT_LEN];
     buf[0] = opcode;
     buf[1..1 + payload.len()].copy_from_slice(payload);

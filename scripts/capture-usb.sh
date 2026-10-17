@@ -8,8 +8,14 @@
 # Output: /var/tmp/lk67-<timestamp>.pcapng (raw) and .txt (decoded).
 set -euo pipefail
 
+# Captures hold keystrokes: everything this script writes is private.
+umask 077
+
 VID="${VID:-3151}"
 PID="${PID:-4003}"
+# tshark's USB fields are decimal.
+VID_DEC="$((16#${VID}))"
+PID_DEC="$((16#${PID}))"
 DUR="${1:-60}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 OUT="${2:-/var/tmp/lk67-${STAMP}}"
@@ -37,12 +43,18 @@ echo "  2. open the keymap / Fn-layer page"
 echo "  3. change the lighting"
 echo
 
-tshark -i "usbmon${bus}" -a "duration:${DUR}" -w "${OUT}.pcapng"
+# Filtered to the board: an unfiltered capture also records every other device
+# on the bus, which on a keyboard is a record of what the user typed.
+tshark -i "usbmon${bus}" -a "duration:${DUR}" \
+    -Y "usb.idVendor == ${VID_DEC} && usb.idProduct == ${PID_DEC}" \
+    -w "${OUT}.pcapng"
 
 echo
 echo "decoding -> ${OUT}.txt"
 bash "$(dirname "$0")/decode-usb.sh" "${OUT}.pcapng" > "${OUT}.txt" 2>&1
-chmod 0644 "${OUT}.pcapng" "${OUT}.txt" 2>/dev/null || true
+# A capture can contain every device on the bus, keystrokes included:
+# keep it private.
+chmod 0600 "${OUT}.pcapng" "${OUT}.txt" 2>/dev/null || true
 echo "done."
 echo "  raw:      ${OUT}.pcapng"
 echo "  decoded:  ${OUT}.txt"

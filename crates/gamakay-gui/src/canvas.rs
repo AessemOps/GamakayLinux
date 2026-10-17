@@ -54,15 +54,17 @@ impl Program<Message> for Keyboard<'_> {
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> (canvas::event::Status, Option<Message>) {
-        if let canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event
-            && let Some(pos) = cursor.position_in(bounds)
-            && let Some(k) = hit(pos, bounds)
-        {
-            *state = Some(k.slot);
-            return (
-                canvas::event::Status::Captured,
-                Some(Message::SelectSlot(k.slot)),
-            );
+        // Nested rather than a let chain: the declared MSRV is 1.85.
+        if let canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event {
+            if let Some(pos) = cursor.position_in(bounds) {
+                if let Some(k) = hit(pos, bounds) {
+                    *state = Some(k.slot);
+                    return (
+                        canvas::event::Status::Captured,
+                        Some(Message::SelectSlot(k.slot)),
+                    );
+                }
+            }
         }
         (canvas::event::Status::Ignored, None)
     }

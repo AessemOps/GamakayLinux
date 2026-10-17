@@ -22,6 +22,11 @@ pub const BULK_PAGE_DATA: usize = 56;
 /// Bulk-write pages: eight data pages then the commit page.
 pub const BULK_PAGES: u8 = 9;
 
+/// Slots a bulk layer write actually reaches: the nine pages carry 504 bytes,
+/// so slots 126 and 127 are never transmitted and cannot be remapped. A write
+/// to them silently does nothing, so front-ends refuse them instead.
+pub const TX_SLOTS: usize = BULK_PAGE_DATA * BULK_PAGES as usize / 4;
+
 /// Extra passes allowed to confirm a layer read (see [`Session::read_layer`]).
 pub const LAYER_READ_TRIES: u32 = 2;
 
@@ -155,7 +160,9 @@ impl Slot {
             }
             SlotValue::Action { a, b } => action_name(a, b),
             SlotValue::Profile { kind, index } => match kind {
-                4 => format!("Profile {}", index + 1),
+                // `index` comes off the board, so it can be 255: the sum must
+                // not overflow (debug panics, release wraps to a wrong label).
+                4 => format!("Profile {}", u16::from(index) + 1),
                 3 => "Profile loop".to_string(),
                 0 => "Profile value".to_string(),
                 _ => format!("Profile {kind}:{index}"),
@@ -192,10 +199,16 @@ pub struct Keymap {
 }
 
 impl Keymap {
+    /// Parse a whole layer. Panics are not an option on data read from the
+    /// board, so a short slice yields the slots it covers and leaves the rest
+    /// empty rather than indexing out of bounds.
     pub fn from_bytes(b: &[u8]) -> Self {
         let mut slots = [Slot::EMPTY; SLOTS];
         for (i, slot) in slots.iter_mut().enumerate() {
-            slot.0.copy_from_slice(&b[i * 4..i * 4 + 4]);
+            let at = i * 4;
+            if at + 4 <= b.len() {
+                slot.0.copy_from_slice(&b[at..at + 4]);
+            }
         }
         Self { slots }
     }
@@ -208,12 +221,23 @@ impl Keymap {
         out
     }
 
-    pub fn get(&self, slot: usize) -> Slot {
-        self.slots[slot]
+    /// The slot, or `None` when the index is past the layer. Callers pass an
+    /// index parsed from `--slot` or from a profile's keymap table, so this
+    /// must not be an indexing panic (`panic = "abort"` would kill the run).
+    pub fn get(&self, slot: usize) -> Option<Slot> {
+        self.slots.get(slot).copied()
     }
 
-    pub fn set(&mut self, slot: usize, v: Slot) {
-        self.slots[slot] = v;
+    /// Set a slot. Returns `false`, changing nothing, when the index is past
+    /// the layer — see [`Self::get`].
+    pub fn set(&mut self, slot: usize, v: Slot) -> bool {
+        match self.slots.get_mut(slot) {
+            Some(s) => {
+                *s = v;
+                true
+            }
+            None => false,
+        }
     }
 
     /// Map a key name to the slot that currently holds it, for `--key NAME`.
@@ -253,7 +277,12 @@ impl Session<'_> {
             }
             last = again;
         }
-        Ok(last)
+        // Never hand back a layer that did not confirm: callers write what they
+        // read back (a bind is a read-modify-write of the whole layer), so an
+        // unconfirmed read would persist a mixture of the base and Fn keymaps.
+        Err(Error::UnstableLayer {
+            tries: LAYER_READ_TRIES + 1,
+        })
     }
 
     /// One read of every page of a layer, taken as it comes.

@@ -33,7 +33,10 @@ use gamakay_hidraw::HidrawDevice;
 use crate::light::{self, LightArgs};
 use crate::{Cli, select_device};
 
+// A typo in a profile would otherwise be silently ignored, leaving that setting
+// at whatever the board already had while the run reports success.
 #[derive(Deserialize, Debug, Default)]
+#[serde(deny_unknown_fields)]
 struct Profile {
     backlight: Option<Section>,
     edge: Option<Section>,
@@ -43,6 +46,7 @@ struct Profile {
 }
 
 #[derive(Deserialize, Debug, Default, Clone)]
+#[serde(deny_unknown_fields)]
 struct Section {
     mode: Option<String>,
     color: Option<String>,
@@ -84,6 +88,7 @@ pub fn run(cli: &Cli, profile_arg: &str) -> Result<()> {
     let info = select_device(cli)?;
     let mut dev = HidrawDevice::open(&info.path)?;
     let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
+    crate::check_writable(cli, &mut s)?;
 
     if let Some(sec) = &profile.backlight {
         let args = sec.to_args()?;
@@ -100,6 +105,14 @@ pub fn run(cli: &Cli, profile_arg: &str) -> Result<()> {
     }
 
     if let Some(sec) = &profile.edge {
+        // Only a board that has an edge light may be sent 0x08; `light edge
+        // set` refuses the same way, and `apply` must not be the hole in it.
+        if !light::board_has_edge(&mut s) && !cli.force {
+            anyhow::bail!(
+                "the profile has an [edge] section but this board has no edge light \
+                 (pass --force to try anyway)"
+            );
+        }
         let args = sec.to_args()?;
         let cur = s.edge_param()?;
         let p = light::merge(&cur, &args, true)?;
@@ -123,7 +136,16 @@ pub fn run(cli: &Cli, profile_arg: &str) -> Result<()> {
                     .ok_or_else(|| anyhow::anyhow!("no key named {key:?} in the base layer"))?,
             };
             let value = crate::keymap::parse_bind(to)?;
-            layer.set(slot, gamakay_core::keymap::Slot::from_value(value));
+            if slot >= gamakay_core::keymap::TX_SLOTS {
+                anyhow::bail!(
+                    "keymap slot {slot} cannot be written: a bulk write reaches slots \
+                     0..{} (slots {}..{} are read-only on this firmware)",
+                    gamakay_core::keymap::TX_SLOTS - 1,
+                    gamakay_core::keymap::TX_SLOTS,
+                    gamakay_core::keymap::SLOTS - 1
+                );
+            }
+            assert!(layer.set(slot, gamakay_core::keymap::Slot::from_value(value)));
             println!("  keymap slot {slot} -> {to}");
         }
         s.write_layer(profile_idx, &layer, false)?;
