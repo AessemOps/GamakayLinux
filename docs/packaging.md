@@ -46,13 +46,26 @@ mkdir -p ~/.local/bin
 curl -fsSL https://github.com/goreleaser/nfpm/releases/download/v2.48.0/nfpm_2.48.0_Linux_x86_64.tar.gz \
   | tar -xz -C ~/.local/bin nfpm
 curl -fsSL -o ~/.local/bin/appimagetool \
-  https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+  https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+echo "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  $HOME/.local/bin/appimagetool" | sha256sum -c -
 chmod +x ~/.local/bin/appimagetool
 
+# appimagetool otherwise downloads the runtime it embeds from a rolling
+# `continuous` URL with no integrity check. Pin the same one CI does.
+curl -fsSL -o /tmp/runtime-x86_64 \
+  https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
+echo "2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d  /tmp/runtime-x86_64" | sha256sum -c -
+
 make release                     # the packages ship target/release
-make package-deb package-rpm APPIMAGETOOL=$HOME/.local/bin/appimagetool
-make package-verify              # what actually landed in them
+make package-deb package-rpm
+make package-appimage \
+  APPIMAGE_RUNTIME=/tmp/runtime-x86_64 \
+  APPIMAGETOOL="$HOME/.local/bin/appimagetool"
+make package-verify              # what actually landed in them (needs rpm and rg)
 ```
+
+`appimagetool` is itself an AppImage; on a host without FUSE run it as
+`"$HOME/.local/bin/appimagetool --appimage-extract-and-run"`.
 
 `make package-verify` reads the artefacts rather than the config: `ar`/`tar` for
 the `.deb` (no `dpkg-deb` needed) and `rpm -qpi/-qpl` with a scratch database for
@@ -61,6 +74,19 @@ the `.rpm`.
 The icons are committed, so a package build needs no image tooling. They are
 generated from `packaging/icons/gamakay.svg` by `scripts/make-icons.sh` when the
 SVG changes.
+
+## Source integrity in the Arch package
+
+A `PKGBUILD` cannot carry the hash of a tarball that the tag has not produced
+yet, so `sha256sums` starts as `SKIP`. The release workflow prints the correct
+value in its run summary; immediately after pushing a tag, paste it in and push
+a follow-up commit:
+
+```bash
+cd packaging/arch && updpkgsums && git commit -am "chore(arch): verify the release tarball"
+```
+
+Until that commit lands, this is the only package without source verification.
 
 ## Versions
 

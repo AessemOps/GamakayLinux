@@ -9,7 +9,9 @@ pkgname=gamakaylinux
 pkgver=0.1.0
 pkgrel=1
 pkgdesc="Configure the GamaKay LK67 keyboard from Linux over USB"
-arch=('x86_64' 'aarch64')
+# x86_64 only: nothing builds or verifies aarch64, and claiming it would ship a
+# package no one has tested.
+arch=('x86_64')
 url="https://github.com/AessemOps/GamakayLinux"
 license=('GPL-3.0-or-later')
 # The GUI loads its display, input and GPU stack with dlopen at runtime, so none
@@ -19,20 +21,26 @@ depends=('libxkbcommon' 'wayland' 'libx11' 'libxcursor' 'libxi' 'libxrandr'
 makedepends=('cargo' 'rust')
 install="$pkgname.install"
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
+# GitHub's archive extracts to the *repository* name, not $pkgname.
+_archive="GamakayLinux-$pkgver"
+# !! Filled in by `updpkgsums` (or `makepkg -g`) immediately after the tag is
+# pushed: the tarball cannot be hashed before it exists. The release workflow
+# prints the correct value in its run summary. Until then this is the only
+# package here without source verification.
 sha256sums=('SKIP')
 
 prepare() {
-  cd "$pkgname-$pkgver"
+  cd "$_archive"
   cargo fetch --locked
 }
 
 build() {
-  cd "$pkgname-$pkgver"
+  cd "$_archive"
   cargo build --frozen --release --locked
 }
 
 package() {
-  cd "$pkgname-$pkgver"
+  cd "$_archive"
   install -Dm755 target/release/gamakay "$pkgdir/usr/bin/gamakay"
   install -Dm755 target/release/gamakay-gui "$pkgdir/usr/bin/gamakay-gui"
   install -Dm644 packaging/udev/70-gamakay.rules \

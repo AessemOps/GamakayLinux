@@ -162,6 +162,17 @@ pub const LK67_FLAGS: FlagsPair = FlagsPair {
     rainbow: 8,
 };
 
+/// The highest mode code this firmware family implements. The set has gaps
+/// (13, 20..22 and 25 are reserved), so codes in this range are accepted and
+/// round-tripped even when this build does not model them.
+pub const MAX_MODE_CODE: u8 = 25;
+
+/// Whether `code` is a mode code the board could have. One predicate, so the
+/// two front-ends cannot disagree about the range.
+pub const fn is_mode_code(code: u8) -> bool {
+    code >= 1 && code <= MAX_MODE_CODE
+}
+
 /// What a caller sets. `speed` and `brightness` are the host scale (0..4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LedParam {
@@ -185,8 +196,16 @@ impl LedParam {
         self.payload(flags, wire_speed)
     }
 
-    /// The 7-byte payload for an edge SET (speed not inverted).
+    /// The 7-byte payload for an edge SET (speed not inverted). Unlike the
+    /// backlight, the wire speed *is* the host speed, so it is range-checked
+    /// here rather than by whatever called us.
     pub fn edge_payload(&self, flags: FlagsPair) -> Result<[u8; 7]> {
+        if self.speed > 5 {
+            return Err(Error::OutOfRange {
+                field: "speed",
+                value: i64::from(self.speed),
+            });
+        }
         self.payload(flags, self.speed)
     }
 
@@ -229,6 +248,14 @@ impl LedParam {
         } else {
             flags.fixed
         };
+        // `option` is a full nibble on the wire; a value that would be
+        // truncated is refused rather than silently masked.
+        if self.option > 0x0F {
+            return Err(Error::OutOfRange {
+                field: "option",
+                value: i64::from(self.option),
+            });
+        }
         let flags4 = ((self.option & 0x0F) << 4) | (flag_nibble & 0x0F);
         let [r, g, b] = wire_rgb(self.rgb);
         Ok([self.mode, wire_speed, self.brightness, flags4, r, g, b])

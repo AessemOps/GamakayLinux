@@ -11,7 +11,7 @@
 # ambiguous: `info` is both a CLI subcommand and a GUI tab, and the CLI wins;
 # use `--gui info` for the tab. Keeping the CLI reachable is what makes the
 # AppImage testable on a machine with no display.
-set -e
+set -eu
 
 here="$(dirname "$(readlink -f "$0")")"
 export APPDIR="$here"

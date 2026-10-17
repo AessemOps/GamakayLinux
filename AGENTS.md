@@ -35,7 +35,7 @@ guard refuses a block-list of destructive and bootloader opcodes by name.
 
 ## Commands
 
-`make check` runs the whole gate; the individual steps are below.
+`make lint` checks formatting and lints; `make check` runs that plus the tests.
 
 ```bash
 cargo build --release            # gamakay: LTO, stripped, panic=abort

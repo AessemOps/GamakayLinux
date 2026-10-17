@@ -47,6 +47,18 @@ if [ -n "$tag" ] && [ "$tag" != "$cargo_version" ]; then
     status=1
 fi
 
+# The AppStream metadata advertises a version to software centres, and it is a
+# hand-written literal like the others.
+metainfo="packaging/io.github.aessemops.gamakaylinux.metainfo.xml"
+if [ -f "$metainfo" ]; then
+    metainfo_version="$(sed -n 's/.*<release version="\([^"]*\)".*/\1/p' "$metainfo" | head -1)"
+    echo "packaging/${metainfo#packaging/} : ${metainfo_version:-<none>}"
+    if [ "$metainfo_version" != "$cargo_version" ]; then
+        echo "error: AppStream <release version> does not match the workspace version" >&2
+        status=1
+    fi
+fi
+
 # The crates inherit the workspace version; a stray literal would silently
 # package a different number than the one on the tag.
 if grep -rn '^version = "' crates/*/Cargo.toml >/dev/null 2>&1; then

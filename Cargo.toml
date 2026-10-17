@@ -10,7 +10,9 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+# 1.86, not 1.85: the Wayland stack needs it (calloop 0.14 and
+# wayland-protocols 0.32 declare 1.86). `cargo check` on 1.86 is a CI job.
+rust-version = "1.86"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/AessemOps/GamakayLinux"
 authors = ["GamakayLinux contributors"]

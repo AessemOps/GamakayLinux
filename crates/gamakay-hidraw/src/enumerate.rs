@@ -14,8 +14,6 @@ pub struct HidrawInfo {
     pub name: String,
     pub vendor_id: u16,
     pub product_id: u16,
-    /// Bus from `HID_ID` (0x03 USB, 0x05 Bluetooth).
-    pub bus: u16,
     pub connection: Connection,
     /// Bytes of the largest feature report in the descriptor.
     pub feature_bytes: usize,
@@ -105,7 +103,6 @@ fn read_node(class_link: &Path) -> Option<HidrawInfo> {
         name,
         vendor_id,
         product_id,
-        bus,
         connection: connection_of(bus),
         feature_bytes: summary.feature_bytes,
         usage_page: summary.app_usage_page,

@@ -1,0 +1,13 @@
+# Keep the toolchain and the two places dependencies live current: the crates
+# and the workflow actions (which are pinned to commit SHAs and otherwise never
+# move).
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

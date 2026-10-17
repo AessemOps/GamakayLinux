@@ -85,12 +85,16 @@ fn with_profile<T>(
     let Some(want) = requested else {
         return f(s, previous);
     };
-    let layers = s
-        .device_id()
-        .ok()
-        .and_then(gamakay_core::device::by_id)
-        .map(|r| r.layer)
-        .unwrap_or(1);
+    // Identify rather than assume a count: guessing "one profile" turned a
+    // transient reply failure into "this board has profiles 0..0".
+    let id = s.device_id().context("identifying the board")?;
+    let layers = match gamakay_core::device::by_id(id) {
+        Some(rec) => rec.layer,
+        None => bail!(
+            "the attached board reports unknown id {id}, so its profile count is not known; \
+             refusing to guess a profile index"
+        ),
+    };
     if want >= layers {
         bail!(
             "profile {want} does not exist: this board has profiles 0..{}",
@@ -98,6 +102,13 @@ fn with_profile<T>(
         );
     }
     if want == previous {
+        return f(s, previous);
+    }
+    if s.is_dry_run() {
+        // The select is a write, so dry-run holds it back and the board stays
+        // on `previous`: reading it as `want` would show (and, for a set,
+        // write) a layer the command never selected.
+        eprintln!("dry run: profile {want} would be selected; reading profile {previous} instead");
         return f(s, previous);
     }
     s.set_profile(want).context("selecting the profile")?;
@@ -225,7 +236,14 @@ pub(crate) fn parse_bind(s: &str) -> Result<SlotValue> {
             Some((i, m)) => (i.trim(), parse_macro_mode(m.trim())?),
             None => (rest.trim(), 0u8),
         };
-        let index: u8 = idx.parse().context("macro index (0..49)")?;
+        let index: u8 = idx.parse().context("macro index")?;
+        if usize::from(index) >= usize::from(gamakay_core::macros::MACRO_SLOTS) {
+            bail!(
+                "macro index {index} does not exist: the board has {} slots (0..{})",
+                gamakay_core::macros::MACRO_SLOTS,
+                gamakay_core::macros::MACRO_SLOTS - 1
+            );
+        }
         return Ok(SlotValue::Macro { mode, index });
     }
     match keycode::usage(t) {
@@ -245,5 +263,38 @@ fn parse_macro_mode(s: &str) -> Result<u8> {
             Ok(n) if n <= 2 => Ok(n),
             _ => bail!("macro mode must be repeat, toggle or hold (0..=2), got {s:?}"),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `macro:<index>` is bounded by the board's slot count. This assert exists
+    /// because the bound was once dropped in an edit and nothing caught it.
+    #[test]
+    fn macro_index_is_bounded_by_the_slot_count() {
+        assert!(parse_bind("macro:0").is_ok());
+        assert!(parse_bind("macro:49").is_ok());
+        let err = parse_bind("macro:50").unwrap_err().to_string();
+        assert!(err.contains("does not exist"), "{err}");
+        assert!(parse_bind("macro:200").is_err());
+    }
+
+    /// The syntax is `macro:<index>[:<mode>]`, and the mode is one of three.
+    #[test]
+    fn macro_bindings_take_an_index_and_an_optional_mode() {
+        assert!(parse_bind("macro:5").is_ok(), "the mode defaults to repeat");
+        assert!(parse_bind("macro:5:toggle").is_ok());
+        assert!(parse_bind("macro:5:hold").is_ok());
+        assert!(parse_bind("macro:5:9").is_err(), "mode is 0..=2");
+        assert!(parse_bind("macro:5:nonsense").is_err());
+    }
+
+    #[test]
+    fn bindings_and_keys_parse() {
+        assert_eq!(parse_bind("Esc").unwrap(), SlotValue::Hid(0x29));
+        assert_eq!(parse_bind("none").unwrap(), SlotValue::Empty);
+        assert!(parse_bind("not_a_key").is_err());
     }
 }

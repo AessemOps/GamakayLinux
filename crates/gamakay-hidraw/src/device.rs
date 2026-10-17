@@ -2,7 +2,7 @@
 //! The hidraw node itself: the four `Transport` primitives over ioctls.
 
 use std::fs::{File, OpenOptions};
-use std::io::{ErrorKind, Read, Write};
+
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
@@ -112,38 +112,9 @@ impl Transport for HidrawDevice {
         Ok(REPORT_LEN)
     }
 
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        self.file.write(buf).map_err(io_err)
-    }
-
-    fn read_timeout(&mut self, buf: &mut [u8], timeout_ms: i32) -> Result<usize> {
-        let mut pfd = libc::pollfd {
-            fd: self.fd(),
-            events: libc::POLLIN,
-            revents: 0,
-        };
-        // SAFETY: one valid pollfd.
-        let rc = unsafe { libc::poll(&mut pfd, 1, timeout_ms) };
-        if rc < 0 {
-            return Err(io_err(std::io::Error::last_os_error()));
-        }
-        if rc == 0 {
-            return Err(Error::NoReply { opcode: 0 });
-        }
-        match self.file.read(buf) {
-            Ok(n) => Ok(n),
-            Err(e) if e.kind() == ErrorKind::WouldBlock => Err(Error::NoReply { opcode: 0 }),
-            Err(e) => Err(io_err(e)),
-        }
-    }
-
     fn describe(&self) -> String {
         self.path.display().to_string()
     }
-}
-
-fn io_err(e: std::io::Error) -> Error {
-    Error::Transport(e.to_string())
 }
 
 #[cfg(test)]

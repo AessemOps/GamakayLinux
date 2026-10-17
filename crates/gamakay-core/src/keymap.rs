@@ -114,14 +114,6 @@ impl Slot {
 
     /// Whether the firmware runs this entry itself, so the Fn-layer key it
     /// sits on cannot be repurposed. The knob's own keys are the other such
-    /// set (the vendor calls both "system keys").
-    pub fn is_firmware_owned(self) -> bool {
-        matches!(
-            self.value(),
-            SlotValue::Special(_) | SlotValue::Action { .. }
-        )
-    }
-
     pub fn from_value(v: SlotValue) -> Self {
         match v {
             SlotValue::Empty => Self::EMPTY,
@@ -247,17 +239,6 @@ impl Keymap {
         self.slots
             .iter()
             .position(|s| matches!(s.value(), SlotValue::Hid(u) if u == want))
-    }
-
-    /// Every slot holding a known key name.
-    pub fn named_slots(&self) -> impl Iterator<Item = (usize, &'static str)> + '_ {
-        self.slots
-            .iter()
-            .enumerate()
-            .filter_map(|(i, s)| match s.value() {
-                SlotValue::Hid(u) => keycode::name(u).map(|n| (i, n)),
-                _ => None,
-            })
     }
 }
 

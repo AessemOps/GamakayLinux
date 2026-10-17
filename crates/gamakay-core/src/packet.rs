@@ -59,7 +59,7 @@ pub fn packet(opcode: u8, payload: &[u8], mode: Checksum) -> Result<[u8; REPORT_
     // checksum would silently drop the payload byte sitting there.
     if let Some(at) = mode.at() {
         if payload.get(at - 1).is_some_and(|b| *b != 0) {
-            return Err(Error::PayloadTooLong { len: payload.len() });
+            return Err(Error::PayloadOverChecksum { at });
         }
     }
     let mut buf = [0u8; REPORT_LEN];

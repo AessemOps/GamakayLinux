@@ -1,0 +1,18 @@
+# `cargo audit` runs in CI (the `audit` job in .github/workflows/ci.yml).
+#
+# The ignores below are all transitive through iced 0.13 and cannot be fixed
+# here: `cargo update` cannot move them, because iced_glyphon 0.6 pins
+# lru = "0.12". They clear with the iced 0.14 upgrade (which moves to lru 0.16
+# through cryoglyph, at the cost of raising the MSRV from 1.85 to 1.88).
+# Each is a warning, not a vulnerability: no known exploitable path.
+[advisories]
+ignore = [
+    # Unsound, but only via LruCache::IterMut / pop, used by iced's glyph atlas.
+    "RUSTSEC-2026-0002",
+    "RUSTSEC-2026-0253",
+    # Unmaintained, not unsound.
+    "RUSTSEC-2024-0384", # instant
+    "RUSTSEC-2024-0436", # paste
+    "RUSTSEC-2026-0206", # rustybuzz
+    "RUSTSEC-2026-0192", # ttf-parser
+]

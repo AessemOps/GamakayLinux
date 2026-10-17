@@ -155,8 +155,11 @@ impl Program<Message> for Keyboard<'_> {
                 .filter(|(slot, _)| *slot == k.slot)
                 .map(|(_, v)| (v.as_str(), PREVIEW));
             let current = self.bindings.get(&k.slot).map(|v| (v.as_str(), BINDING));
-            if let Some((text, color)) = preview.or(current)
-                && glyph::legend(text) != glyph::legend(k.label)
+            // Nested rather than a let chain: the declared MSRV is 1.86, and
+            // let chains are not stable there.
+            if let Some((text, color)) = preview
+                .or(current)
+                .filter(|(text, _)| glyph::legend(text) != glyph::legend(k.label))
             {
                 let at = Point::new(rect.center_x(), rect.y + rect.height * 0.62);
                 if at.x.is_finite() && at.y.is_finite() {
