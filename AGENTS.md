@@ -25,7 +25,7 @@ guard refuses a block-list of destructive and bootloader opcodes by name.
 | `crates/gamakay-core/` | Protocol packets/checksums, opcode table, device table, safety guard, `Transport` trait, `Session`, decode/encode, `MockTransport` |
 | `crates/gamakay-hidraw/` | Linux hidraw transport: sysfs enumeration, report-descriptor parse, `HIDIOCSFEATURE`/`HIDIOCGFEATURE` ioctls, plus the `raw` example |
 | `crates/gamakay-cli/` | The `gamakay` binary (`clap`) |
-| `crates/gamakay-gui/` | The iced app (**Phase 5**, not yet present) |
+| `crates/gamakay-gui/` | The iced 0.13 app (`gamakay-gui`): tabs over the same core, a keyboard canvas, device I/O on a worker thread |
 | `docs/protocol.md` | Command reference, byte layouts, transport matrix — the **allow-list source of truth** |
 | `docs/re-workflow.md` | How the protocol was captured and how to extend it |
 | `tests/fixtures/` | Decoded packet fixtures (hex captured from hardware) |
@@ -38,6 +38,7 @@ There is no `make test`; run the gates directly.
 
 ```bash
 cargo build --release            # gamakay: LTO, stripped, panic=abort
+cargo build -p gamakay-gui       # the iced GUI (gamakay-gui)
 cargo test                       # unit tests + hardware fixture replay
 
 cargo fmt --all --check          # formatting gate
@@ -107,7 +108,7 @@ gamakay keymap set --slot 20 --to macro:0   # bind macro 0 to a key
 - **Protocol rule**: `docs/protocol.md` is the allow-list source of truth. A
   change that adds or alters a command updates `docs/protocol.md`, the guard
   allow-list and a test **in the same change**. New wire facts get a marker:
-  **[HW]** (a plugged-in board), **[REF]** (derived from the GPL `sharkfin`
+  **[HW]** (a plugged-in board), **[REF]** (derived from GAMAKAY's driver
   document), or **[FW]** (a firmware image).
 - **Clean-room rule**: the vendor Electron bundle is extracted into the
   gitignored `vendor/` for study only and is **never** committed, bundled or

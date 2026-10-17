@@ -18,7 +18,7 @@ use crate::packet::{Checksum, REPORT_LEN};
 
 /// How long a board is given to settle before its reply is read back, and how
 /// many times the read is retried (with a growing gap).
-pub const SETTLE_MS: u64 = 10;
+pub const SETTLE_MS: u64 = 20;
 pub const REPLY_TRIES: u32 = 5;
 
 /// The raw device operations. The hidraw backend implements this against

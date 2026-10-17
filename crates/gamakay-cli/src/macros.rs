@@ -15,8 +15,8 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 
 use gamakay_core::guard::Guard;
-use gamakay_core::keycode;
-use gamakay_core::macros::{MACRO_SLOTS, Macro, MacroEvent};
+
+use gamakay_core::macros::{MACRO_SLOTS, Macro, describe, parse_steps};
 use gamakay_core::transport::Session;
 use gamakay_hidraw::HidrawDevice;
 
@@ -140,106 +140,4 @@ fn delete(cli: &Cli, args: &DeleteArgs) -> Result<()> {
         println!("macro {} cleared", args.slot);
     }
     Ok(())
-}
-
-fn describe(m: &Macro) -> String {
-    if m.events.is_empty() {
-        return "(empty)".to_string();
-    }
-    m.events
-        .iter()
-        .map(describe_event)
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-fn describe_event(e: &MacroEvent) -> String {
-    match *e {
-        MacroEvent::Key {
-            usage,
-            pressed,
-            delay_ms,
-        } => {
-            let name = keycode::name(usage)
-                .map(str::to_string)
-                .unwrap_or_else(|| format!("0x{usage:02X}"));
-            let sign = if pressed { "+" } else { "-" };
-            format!("{name}{sign}@{delay_ms}")
-        }
-        MacroEvent::MouseButton {
-            button,
-            pressed,
-            delay_ms,
-        } => {
-            let sign = if pressed { "+" } else { "-" };
-            format!("mouse:{button}{sign}@{delay_ms}")
-        }
-        MacroEvent::MouseMove { dx, dy, delay_ms } => {
-            format!("move:{dx}:{dy}@{delay_ms}")
-        }
-    }
-}
-
-/// Parse the `--steps` DSL.
-fn parse_steps(s: &str) -> Result<Vec<MacroEvent>> {
-    let mut events = Vec::new();
-    for raw in s.split(',') {
-        let tok = raw.trim();
-        if tok.is_empty() {
-            continue;
-        }
-        let (body, delay) = match tok.rsplit_once('@') {
-            Some((b, d)) => (
-                b.trim(),
-                d.trim()
-                    .parse::<u16>()
-                    .with_context(|| format!("bad delay in {tok:?}"))?,
-            ),
-            None => (tok, 0u16),
-        };
-        if let Some(rest) = body.strip_prefix("move:") {
-            let (dx, dy) = rest
-                .split_once(':')
-                .ok_or_else(|| anyhow::anyhow!("move needs dx:dy, got {rest:?}"))?;
-            let dx: i8 = dx.trim().parse().context("move dx")?;
-            let dy: i8 = dy.trim().parse().context("move dy")?;
-            if delay > 255 {
-                bail!("move delay max is 255 ms");
-            }
-            events.push(MacroEvent::MouseMove {
-                dx,
-                dy,
-                delay_ms: delay as u8,
-            });
-            continue;
-        }
-        if let Some(rest) = body.strip_prefix("mouse:") {
-            let (n, pressed) = split_press(rest)?;
-            let button: u8 = n.parse().context("mouse button number (0..4)")?;
-            events.push(MacroEvent::MouseButton {
-                button,
-                pressed,
-                delay_ms: delay,
-            });
-            continue;
-        }
-        let (name, pressed) = split_press(body)?;
-        let usage = keycode::usage(name).ok_or_else(|| anyhow::anyhow!("unknown key {name:?}"))?;
-        events.push(MacroEvent::Key {
-            usage,
-            pressed,
-            delay_ms: delay,
-        });
-    }
-    Ok(events)
-}
-
-fn split_press(s: &str) -> Result<(&str, bool)> {
-    if let Some(n) = s.strip_suffix('+') {
-        Ok((n.trim(), true))
-    } else if let Some(n) = s.strip_suffix('-') {
-        Ok((n.trim(), false))
-    } else {
-        bail!("event {s:?} needs + (down) or - (up)")
-    }
 }

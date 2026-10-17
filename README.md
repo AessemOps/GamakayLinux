@@ -5,9 +5,9 @@ the **GamaKay LK67**. It configures the keyboard over USB, the 2.4 GHz dongle
 and Bluetooth with no resident process: every setting is written to the
 keyboard's own memory and the program exits.
 
-> Status: **Phase 4** — `list` / `info`, lighting, the base and Fn keymaps, and
-> macros are implemented and verified on hardware. The iced GUI is Phase 5. See
-> `.kilo/plans/1792003709046-gamakay-linux-rust-app.md`.
+> Status: **Phase 5** — `list` / `info`, lighting, the base and Fn keymaps,
+> macros, and an iced GUI (`gamakay-gui`) are implemented and verified on
+> hardware. See `.kilo/plans/1792003709046-gamakay-linux-rust-app.md`.
 >
 > The 2026-10 firmware update re-enumerated the board as `3151:4003` (id 290);
 > both the new and the pre-update ids are supported.
@@ -96,6 +96,34 @@ CapsLock = "Esc"
 ```
 
 `--dry-run` prints the packet a command would send and sends nothing.
+
+### GUI
+
+`gamakay-gui` is an iced 0.13 front-end over the same core: a **keyboard
+canvas** drawn from the LK67 layout, with tabs for Info, Lighting, Keymap
+(base and Fn) and Macros. The canvas shows every key with its current binding;
+click a key to select it and the pending rebind is previewed on the key. The
+Lighting tab has a **hue/saturation colour wheel** (click or drag to pick) and
+a **live, animated preview** — the board reflects the colour, rainbow and
+brightness, and reproduces the selected mode (static, breathing, spectrum,
+wave, ripple/radiant, star dots, flow, key shadow, layers, sine, spring, neon,
+loop, colour grid, snowfall, meteor, silent snow). The mode animations are
+**best-effort approximations** of the firmware (built from the timing tables in
+`docs/protocol.md`), not byte-exact; the reactive modes (key shadow, and modes
+that spawn on a key press) show their idle state. All device I/O runs on a
+worker thread, so the window never blocks, and the animation only runs on the
+Lighting tab. The Macros tab has a **recorder**: press Record, type the macro on
+the keyboard, press Stop, then save it to one of the 50 onboard slots (the slot
+list shows what each slot holds). Each keystroke becomes a press/release event
+carrying the pause before it, so the take reproduces your typing rhythm; a key
+still held when recording stops is released, a key the board cannot send is
+skipped, and the take is stopped before it outgrows the 256-byte slot.
+`gamakay-gui lighting` (or `keymap`/`macros`/`info`) opens on a given tab.
+
+```bash
+gamakay-gui              # opens on the Info tab
+gamakay-gui lighting
+```
 
 ### Writing
 

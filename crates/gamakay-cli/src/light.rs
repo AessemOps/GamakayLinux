@@ -44,7 +44,7 @@ pub struct LightArgs {
     /// Colour as `#RRGGBB` or `RRGGBB`.
     #[arg(long, value_parser = parse_color)]
     pub color: Option<[u8; 3]>,
-    /// Brightness, 0..5 (the LK67 reports up to 5).
+    /// Brightness, 0..4.
     #[arg(long)]
     pub brightness: Option<u8>,
     /// Speed, 0..4 (0 slowest). Inverted on the wire for the backlight.
@@ -63,7 +63,9 @@ pub struct LightArgs {
 
 pub fn parse_color(s: &str) -> Result<[u8; 3], String> {
     let t = s.trim().trim_start_matches('#');
-    if t.len() != 6 {
+    // Byte offsets below, so a six-*byte* non-ASCII argument (say "€€") would
+    // otherwise panic on a char boundary instead of being rejected.
+    if t.len() != 6 || !t.is_ascii() {
         return Err(format!("colour must be 6 hex digits, got {s:?}"));
     }
     let b =
@@ -171,9 +173,9 @@ pub(crate) fn merge(cur: &LedState, args: &LightArgs, edge: bool) -> Result<LedP
         None => cur.mode,
     };
     if let Some(b) = args.brightness
-        && b > 5
+        && b > 4
     {
-        bail!("brightness {b} is out of range (0..5)");
+        bail!("brightness {b} is out of range (0..4)");
     }
     if let Some(sp) = args.speed
         && sp > 4
@@ -253,4 +255,19 @@ pub(crate) fn print_state(label: &str, s: &LedState) {
 pub(crate) fn print_plan(pkt: &[u8; 64]) {
     let hex: Vec<String> = pkt.iter().take(16).map(|b| format!("{b:02x}")).collect();
     println!("dry run: {}", hex.join(" "));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn colour_args_are_six_hex_digits() {
+        assert_eq!(parse_color("#ff0000"), Ok([0xff, 0x00, 0x00]));
+        assert_eq!(parse_color("ff0000"), Ok([0xff, 0x00, 0x00]));
+        assert!(parse_color("#ff00").is_err());
+        // Six *bytes* of non-ASCII must be an error, not a char-boundary panic.
+        assert!(parse_color("€€").is_err());
+        assert!(parse_color("ééé").is_err());
+    }
 }

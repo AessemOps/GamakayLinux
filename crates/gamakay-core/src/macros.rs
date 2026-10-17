@@ -22,6 +22,9 @@ pub const MACRO_PAGE_DATA: usize = 56;
 pub const MACRO_PAGES: u8 = 4;
 /// Pages a macro write sends: 5 x 56 (>= 256 bytes).
 pub const MACRO_WRITE_PAGES: u8 = 5;
+/// Bytes the event stream may occupy: the blob less the two repeat bytes and
+/// the four-byte terminator.
+pub const MACRO_STREAM_MAX: usize = MACRO_BYTES - 6;
 
 const MOUSE_BTN_BASE: u8 = 0xF0; // ..=0xF4: left, right, middle, back, forward
 const MOUSE_MOVE: u8 = 0xF9;
@@ -54,9 +57,27 @@ pub struct Macro {
     pub events: Vec<MacroEvent>,
 }
 
+impl MacroEvent {
+    /// Bytes this event adds to the stream: four for a mouse move, two for a
+    /// press whose delay fits the short form, otherwise four.
+    pub fn encoded_len(&self) -> usize {
+        match *self {
+            MacroEvent::MouseMove { .. } => 4,
+            MacroEvent::Key { delay_ms, .. } | MacroEvent::MouseButton { delay_ms, .. } => {
+                if (1..=127).contains(&delay_ms) { 2 } else { 4 }
+            }
+        }
+    }
+}
+
 impl Macro {
     pub fn is_empty(&self) -> bool {
         self.events.is_empty()
+    }
+
+    /// Bytes the stream occupies, which is what the 256-byte blob limits.
+    pub fn stream_len(&self) -> usize {
+        self.events.iter().map(MacroEvent::encoded_len).sum()
     }
 
     /// Encode to the 256-byte blob.
@@ -95,7 +116,7 @@ impl Macro {
                 }
             }
         }
-        if stream.len() > MACRO_BYTES - 6 {
+        if stream.len() > MACRO_STREAM_MAX {
             return Err(Error::OutOfRange {
                 field: "macro length",
                 value: stream.len() as i64,
@@ -180,6 +201,123 @@ fn encode_press(out: &mut Vec<u8>, code: u8, pressed: bool, delay_ms: u16) {
     } else {
         out.extend_from_slice(&[code, hi]);
         out.extend_from_slice(&delay_ms.to_le_bytes());
+    }
+}
+
+/// Parse the `--steps` DSL shared by the CLI and the GUI:
+/// `A+@20, A-@20`, `mouse:0+@10`, `move:5:-3@10`. Each event may carry a
+/// trailing `@MS` delay (default 0).
+pub fn parse_steps(s: &str) -> Result<Vec<MacroEvent>> {
+    let mut events = Vec::new();
+    for raw in s.split(',') {
+        let tok = raw.trim();
+        if tok.is_empty() {
+            continue;
+        }
+        let (body, delay) = match tok.rsplit_once('@') {
+            Some((b, d)) => (
+                b.trim(),
+                d.trim()
+                    .parse::<u16>()
+                    .map_err(|_| Error::Transport(format!("bad delay in {tok:?}")))?,
+            ),
+            None => (tok, 0u16),
+        };
+        if let Some(rest) = body.strip_prefix("move:") {
+            let (dx, dy) = rest
+                .split_once(':')
+                .ok_or_else(|| Error::Transport(format!("move needs dx:dy, got {rest:?}")))?;
+            let dx: i8 = dx
+                .trim()
+                .parse()
+                .map_err(|_| Error::Transport("move dx".into()))?;
+            let dy: i8 = dy
+                .trim()
+                .parse()
+                .map_err(|_| Error::Transport("move dy".into()))?;
+            if delay > 255 {
+                return Err(Error::OutOfRange {
+                    field: "move delay",
+                    value: i64::from(delay),
+                });
+            }
+            events.push(MacroEvent::MouseMove {
+                dx,
+                dy,
+                delay_ms: delay as u8,
+            });
+            continue;
+        }
+        if let Some(rest) = body.strip_prefix("mouse:") {
+            let (n, pressed) = split_press(rest)?;
+            let button: u8 = n
+                .parse()
+                .map_err(|_| Error::Transport("mouse button number (0..4)".into()))?;
+            events.push(MacroEvent::MouseButton {
+                button,
+                pressed,
+                delay_ms: delay,
+            });
+            continue;
+        }
+        let (name, pressed) = split_press(body)?;
+        let usage = crate::keycode::usage(name)
+            .ok_or_else(|| Error::Transport(format!("unknown key {name:?}")))?;
+        events.push(MacroEvent::Key {
+            usage,
+            pressed,
+            delay_ms: delay,
+        });
+    }
+    Ok(events)
+}
+
+fn split_press(s: &str) -> Result<(&str, bool)> {
+    if let Some(n) = s.strip_suffix('+') {
+        Ok((n.trim(), true))
+    } else if let Some(n) = s.strip_suffix('-') {
+        Ok((n.trim(), false))
+    } else {
+        Err(Error::Transport(format!(
+            "event {s:?} needs + (down) or - (up)"
+        )))
+    }
+}
+
+/// A short human description of a macro.
+pub fn describe(m: &Macro) -> String {
+    if m.events.is_empty() {
+        return "(empty)".to_string();
+    }
+    m.events
+        .iter()
+        .map(describe_event)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// A short human description of one event.
+pub fn describe_event(e: &MacroEvent) -> String {
+    match *e {
+        MacroEvent::Key {
+            usage,
+            pressed,
+            delay_ms,
+        } => {
+            let name = crate::keycode::name(usage)
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("0x{usage:02X}"));
+            format!("{name}{}@{delay_ms}", if pressed { "+" } else { "-" })
+        }
+        MacroEvent::MouseButton {
+            button,
+            pressed,
+            delay_ms,
+        } => format!(
+            "mouse:{button}{}@{delay_ms}",
+            if pressed { "+" } else { "-" }
+        ),
+        MacroEvent::MouseMove { dx, dy, delay_ms } => format!("move:{dx}:{dy}@{delay_ms}"),
     }
 }
 
@@ -305,5 +443,61 @@ mod tests {
             events: vec![ev; 200],
         };
         assert!(m.to_blob().is_err());
+    }
+
+    /// The byte counter the editor shows must agree with the encoder, or a
+    /// take can look like it fits and then be refused at save.
+    #[test]
+    fn encoded_len_matches_the_blob() {
+        let m = Macro {
+            repeat: 1,
+            events: vec![
+                MacroEvent::Key {
+                    usage: 0x04,
+                    pressed: true,
+                    delay_ms: 20, // short form
+                },
+                MacroEvent::Key {
+                    usage: 0x04,
+                    pressed: false,
+                    delay_ms: 0, // long form
+                },
+                MacroEvent::MouseMove {
+                    dx: 1,
+                    dy: 2,
+                    delay_ms: 3,
+                },
+                MacroEvent::MouseButton {
+                    button: 0,
+                    pressed: true,
+                    delay_ms: 200, // long form
+                },
+            ],
+        };
+        let blob = m.to_blob().unwrap();
+        assert_eq!(m.stream_len(), 2 + 4 + 4 + 4);
+        // The stream sits after the repeat count, and the rest is terminator.
+        let stream = &blob[2..2 + m.stream_len()];
+        assert!(stream.iter().any(|&b| b != 0));
+        assert!(blob[2 + m.stream_len()..].iter().all(|&b| b == 0));
+    }
+
+    /// A take that fills the slot exactly is accepted; one byte more is not.
+    #[test]
+    fn the_stream_limit_is_the_blob_boundary() {
+        let ev = MacroEvent::Key {
+            usage: 0x04,
+            pressed: true,
+            delay_ms: 1,
+        };
+        let m = Macro {
+            repeat: 1,
+            events: vec![ev; MACRO_STREAM_MAX / 2],
+        };
+        assert_eq!(m.stream_len(), MACRO_STREAM_MAX);
+        assert!(m.to_blob().is_ok());
+        let mut over = m.clone();
+        over.events.push(ev);
+        assert!(over.to_blob().is_err());
     }
 }

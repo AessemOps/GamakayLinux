@@ -4,6 +4,7 @@ members = [
     "crates/gamakay-core",
     "crates/gamakay-hidraw",
     "crates/gamakay-cli",
+    "crates/gamakay-gui",
 ]
 
 [workspace.package]

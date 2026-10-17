@@ -155,14 +155,20 @@ fn cmd_info(cli: &Cli) -> Result<()> {
     );
     println!("device id:   {id}");
     match record {
-        Some(r) => println!(
-            "model:       {} ({}) [{} family, {} layers, {} profiles]",
-            r.display_name,
-            r.name,
-            r.family.name(),
-            r.layer,
-            r.profiles
-        ),
+        Some(r) => {
+            println!(
+                "model:       {} ({}) [{} family]",
+                r.display_name,
+                r.name,
+                r.family.name()
+            );
+            println!(
+                "layers:      {} keymaps; the active one is selected with {:#04x}/{:#04x}",
+                r.layer,
+                gamakay_core::cmd::SET_PROFILE,
+                gamakay_core::cmd::GET_PROFILE
+            );
+        }
         None => println!("model:       unknown (no table record for id {id})"),
     }
     if variant {

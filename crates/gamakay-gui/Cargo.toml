@@ -1,0 +1,22 @@
+[package]
+name = "gamakay-gui"
+description = "iced GUI for GamaKay keyboards"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "gamakay-gui"
+path = "src/main.rs"
+
+[dependencies]
+gamakay-core.workspace = true
+gamakay-hidraw.workspace = true
+iced = { version = "0.13", features = ["canvas", "smol"] }
+
+[dev-dependencies]
+# Check that the bundled font really has every glyph we point at it.
+ttf-parser = "0.20"

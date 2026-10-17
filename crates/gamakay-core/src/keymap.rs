@@ -22,6 +22,41 @@ pub const BULK_PAGE_DATA: usize = 56;
 /// Bulk-write pages: eight data pages then the commit page.
 pub const BULK_PAGES: u8 = 9;
 
+/// Extra passes allowed to confirm a layer read (see [`Session::read_layer`]).
+pub const LAYER_READ_TRIES: u32 = 2;
+
+/// The name of a `0x0D` firmware action. The vendor app encodes these as
+/// `[0x0D, parameter, how, 0]` and names two literally (`LEDBIRINC =
+/// [13,2,1,0]`, `LEDBIRDEC = [13,2,2,0]`); the rest follow the same shape and
+/// the LK67's Fn layer uses exactly these, matching the manual's Fn combos
+/// (Fn+Del, Fn+PgUp/PgDn, Fn+arrows).
+fn action_name(param: u8, how: u8) -> String {
+    let param = match param {
+        1 => "Light",
+        2 => "Bright",
+        3 => "Speed",
+        8 => "Side",
+        _ => return format!("fn {param:02x} {how:02x}"),
+    };
+    match how {
+        0 => format!("{param} mode"),
+        1 => format!("{param} +"),
+        2 => format!("{param} -"),
+        _ => format!("{param} {how}"),
+    }
+}
+
+// The keymap is **per profile**: `0x05` (`SET_PROFILE`) selects the active
+// profile and the keymap commands always address it, so a profile is what the
+// vendor UI calls a "layer". The yc500 device table's `layer` field is this
+// profile count — the LK67 has 8, each with its own keymap (identical clones
+// until edited).
+//
+// This board rejects the newer packet shape (`0x89 [profile, 0xFF, page,
+// subProfile]`, which the vendor app 3.0.27 sends) by echoing it back, so the
+// active profile is the only way to address a layer. See "Layers" in
+// `docs/protocol.md`.
+
 /// A slot's decoded value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SlotValue {
@@ -34,8 +69,18 @@ pub enum SlotValue {
     Consumer(u16),
     /// A macro binding: `[mode, index, 0]`; mode 0 repeat, 1 toggle, 2 hold.
     Macro { mode: u8, index: u8 },
-    /// A special function: 1 Fn, 12 power save, 17 Caps LED swap.
+    /// A special function: 1 Fn, 12 backlight on/off, 17 Caps LED swap.
     Special(u8),
+    /// A firmware action (tag `0x0D`): the lighting controls the firmware runs
+    /// itself. `a` is the parameter, `b` how to move it.
+    Action { a: u8, b: u8 },
+    /// A profile action (tag `0x08`): the vendor's `profile_value` /
+    /// `profile_loop` / `profile_exchange` family. `kind` 4 selects a profile,
+    /// `index` which one (zero based).
+    Profile { kind: u8, index: u8 },
+    /// An OS-mode switch (tag `0x0E`): 0 Windows, 1 macOS, 2 Android, 3 iOS —
+    /// the app's `fnSys` encoding.
+    OsMode(u8),
     /// A tag we do not model; kept verbatim so writes round-trip.
     Unknown([u8; 4]),
 }
@@ -55,8 +100,21 @@ impl Slot {
             0x03 => SlotValue::Consumer(u16::from_le_bytes([b, c])),
             0x09 => SlotValue::Macro { mode: a, index: b },
             0x0A => SlotValue::Special(a),
+            0x0D => SlotValue::Action { a, b },
+            0x08 => SlotValue::Profile { kind: b, index: c },
+            0x0E => SlotValue::OsMode(b),
             _ => SlotValue::Unknown(self.0),
         }
+    }
+
+    /// Whether the firmware runs this entry itself, so the Fn-layer key it
+    /// sits on cannot be repurposed. The knob's own keys are the other such
+    /// set (the vendor calls both "system keys").
+    pub fn is_firmware_owned(self) -> bool {
+        matches!(
+            self.value(),
+            SlotValue::Special(_) | SlotValue::Action { .. }
+        )
     }
 
     pub fn from_value(v: SlotValue) -> Self {
@@ -69,6 +127,9 @@ impl Slot {
             }
             SlotValue::Macro { mode, index } => Slot([0x09, mode, index, 0]),
             SlotValue::Special(s) => Slot([0x0A, s, 0, 0]),
+            SlotValue::Action { a, b } => Slot([0x0D, a, b, 0]),
+            SlotValue::Profile { kind, index } => Slot([0x08, 0, kind, index]),
+            SlotValue::OsMode(n) => Slot([0x0E, 0, n, 0]),
             SlotValue::Unknown(raw) => Slot(raw),
         }
     }
@@ -81,7 +142,10 @@ impl Slot {
                 Some(n) => n.to_string(),
                 None => format!("hid 0x{u:02X}"),
             },
-            SlotValue::Consumer(c) => format!("consumer 0x{c:04X}"),
+            SlotValue::Consumer(c) => match keycode::consumer_name(c) {
+                Some(n) => n.to_string(),
+                None => format!("consumer 0x{c:04X}"),
+            },
             SlotValue::Macro { mode, index } => {
                 let m = ["repeat", "toggle", "hold"]
                     .get(mode as usize)
@@ -89,11 +153,30 @@ impl Slot {
                     .unwrap_or("?");
                 format!("macro {index} ({m})")
             }
+            SlotValue::Action { a, b } => action_name(a, b),
+            SlotValue::Profile { kind, index } => match kind {
+                4 => format!("Profile {}", index + 1),
+                3 => "Profile loop".to_string(),
+                0 => "Profile value".to_string(),
+                _ => format!("Profile {kind}:{index}"),
+            },
+            SlotValue::OsMode(n) => match n {
+                0 => "Windows mode".to_string(),
+                1 => "macOS mode".to_string(),
+                2 => "Android mode".to_string(),
+                3 => "iOS mode".to_string(),
+                _ => format!("OS mode {n}"),
+            },
             SlotValue::Special(s) => match s {
                 1 => "Fn".to_string(),
-                12 => "power-save".to_string(),
-                17 => "caps-led".to_string(),
-                _ => format!("special {s}"),
+                3 => "Lock Win Key".to_string(),
+                12 => "Backlight on/off".to_string(),
+                17 => "Caps LED".to_string(),
+                // 8 sits on Space in the Fn layer and is named nowhere — not in
+                // the vendor app, and its driver does not label it either. Show
+                // nothing rather than a placeholder.
+                8 => String::new(),
+                _ => format!("Fn function {s}"),
             },
             SlotValue::Unknown(r) => {
                 format!("raw {:02x} {:02x} {:02x} {:02x}", r[0], r[1], r[2], r[3])
@@ -157,6 +240,24 @@ impl Keymap {
 impl Session<'_> {
     /// Read a whole layer (`0x89` base, `0x90` Fn) as eight raw pages.
     pub fn read_layer(&mut self, profile: u8, fn_layer: bool) -> Result<Keymap> {
+        // A raw page read takes whatever report is ready after the settle. When
+        // the board is slower than that, a page read returns the *previous*
+        // request's page, which silently mixes the two keymaps — the Fn layer's
+        // values turning up on the base layer. Read twice and only trust a
+        // pass that repeats; a lagging read differs between passes. **[HW]**
+        let mut last = self.read_layer_once(profile, fn_layer)?;
+        for _ in 0..LAYER_READ_TRIES {
+            let again = self.read_layer_once(profile, fn_layer)?;
+            if again == last {
+                return Ok(again);
+            }
+            last = again;
+        }
+        Ok(last)
+    }
+
+    /// One read of every page of a layer, taken as it comes.
+    fn read_layer_once(&mut self, profile: u8, fn_layer: bool) -> Result<Keymap> {
         let opcode = if fn_layer {
             cmd::GET_FN
         } else {
@@ -237,6 +338,10 @@ mod tests {
             SlotValue::Consumer(0x00E9),
             SlotValue::Macro { mode: 1, index: 5 },
             SlotValue::Special(1),
+            SlotValue::Action { a: 2, b: 1 },
+            SlotValue::Action { a: 3, b: 2 },
+            SlotValue::Profile { kind: 4, index: 2 },
+            SlotValue::OsMode(1),
             SlotValue::Unknown([0x42, 1, 2, 3]),
         ] {
             assert_eq!(Slot::from_value(v).value(), v, "round trip {v:?}");

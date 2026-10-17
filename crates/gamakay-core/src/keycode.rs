@@ -166,6 +166,33 @@ const ALIASES: &[(&str, u8)] = &[
     ("apostrophe", 0x34),
 ];
 
+/// Page 0x0C (Consumer) usages the board can send and their names.
+const CONSUMER: &[(u16, &str)] = &[
+    (0x00B5, "Next"),
+    (0x00B6, "Prev"),
+    (0x00B7, "Stop"),
+    (0x00CD, "Play/Pause"),
+    (0x00E2, "Mute"),
+    (0x00E9, "Vol+"),
+    (0x00EA, "Vol-"),
+    (0x0183, "Config"),
+    (0x0192, "Calculator"),
+    (0x0221, "Search"),
+    (0x0223, "Home page"),
+    (0x0224, "Back"),
+    (0x0225, "Forward"),
+    (0x0226, "Stop"),
+    (0x0227, "Refresh"),
+    (0x022A, "Bookmarks"),
+    (0x00B0, "Play"),
+    (0x00B1, "Pause"),
+];
+
+/// The name of a consumer usage, if it is a common one.
+pub fn consumer_name(usage: u16) -> Option<&'static str> {
+    CONSUMER.iter().find(|c| c.0 == usage).map(|c| c.1)
+}
+
 /// The canonical name for a HID usage, if known.
 pub fn name(usage: u8) -> Option<&'static str> {
     KEYS.iter().find(|k| k.0 == usage).map(|k| k.1)
@@ -201,6 +228,13 @@ mod tests {
         assert_eq!(usage("escape"), Some(0x29));
         assert_eq!(usage("0x28"), Some(0x28));
         assert_eq!(usage("nope"), None);
+    }
+
+    #[test]
+    fn consumer_names_resolve() {
+        assert_eq!(consumer_name(0x00E9), Some("Vol+"));
+        assert_eq!(consumer_name(0x00CD), Some("Play/Pause"));
+        assert_eq!(consumer_name(0x1234), None);
     }
 
     #[test]
