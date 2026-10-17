@@ -1,0 +1,20 @@
+# shellcheck shell=sh
+# Arch install scriptlet: make the udev rule take effect without a reboot.
+#
+# The rule is shipped in /usr/lib/udev/rules.d and udev only reads rules on
+# start, on reload, or on a device event, so a reload plus a hidraw trigger is
+# enough. Failure is not fatal: the tools work read-only without the rule.
+
+post_install() {
+    udevadm control --reload-rules >/dev/null 2>&1 || true
+    udevadm trigger --subsystem-match=hidraw >/dev/null 2>&1 || true
+    cat <<'EOF'
+gamakaylinux: the udev rule is installed, so the keyboard's hidraw node is
+readable by the user at the console. Replug the keyboard if it was attached
+before now, then try: gamakay info
+EOF
+}
+
+post_upgrade() {
+    post_install
+}

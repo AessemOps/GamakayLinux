@@ -26,3 +26,24 @@ jobs:
         run: cargo test --all
       - name: Build (release)
         run: cargo build --release --locked
+
+  # Cheap checks for the things that would only fail during a release: a version
+  # that drifted between the three places it is written, or an icon the desktop
+  # entry names and the packages do not ship (appimagetool refuses to build in
+  # that case, so it is worth catching on the pull request).
+  packaging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version fields agree
+        run: ./scripts/check-release-version.sh
+      - name: The desktop entry's icon is shipped
+        run: |-
+          icon="$(sed -n 's/^Icon=//p' packaging/gamakay.desktop)"
+          test -n "$icon" || { echo "no Icon= in the desktop entry"; exit 1; }
+          test -f "packaging/icons/$icon.png"
+          for size in 16 24 32 48 64 128 256 512; do
+            test -f "packaging/icons/hicolor/${size}x${size}/apps/$icon.png" \
+              || { echo "missing ${size}x${size} icon"; exit 1; }
+          done
+          echo "icons ok for $icon"

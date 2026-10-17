@@ -2,6 +2,12 @@
 /target/
 **/*.rs.bk
 
+# Package output (make packages) and makepkg's working dirs
+/dist/
+/packaging/arch/pkg/
+/packaging/arch/src/
+*.pkg.tar.zst
+
 # Clean-room: the extracted vendor app and raw captures are never committed.
 /vendor/
 *.pcapng

@@ -5,9 +5,10 @@ the **GamaKay LK67**. It configures the keyboard over its **USB cable**, with no
 resident process: every setting is written to the keyboard's own memory and the
 program exits.
 
-> Status: **Phase 5** — `list` / `info`, lighting, the base and Fn keymaps,
-> macros, and an iced GUI (`gamakay-gui`) are implemented and verified on
-> hardware. See `.kilo/plans/1792003709046-gamakay-linux-rust-app.md`.
+> Status: **Phase 6** — `list` / `info`, lighting, the base and Fn keymaps, the
+> macro recorder and an iced GUI (`gamakay-gui`) are implemented and verified on
+> hardware, and packaged for Arch, Debian/Ubuntu, Fedora/RHEL and as an AppImage.
+> See `.kilo/plans/1792003709046-gamakay-linux-rust-app.md`.
 >
 > The 2026-10 firmware update re-enumerated the board as `3151:4003` (id 290);
 > both the new and the pre-update ids are supported.
@@ -35,8 +36,37 @@ board's HID protocol directly from Linux:
 | `crates/gamakay-cli/` | The `gamakay` binary |
 | `docs/protocol.md` | Command reference, byte layouts, transport matrix (the allow-list source of truth) |
 | `docs/re-workflow.md` | How the protocol was captured and how to extend it |
+| `docs/packaging.md` | How the four package formats are built, and why each choice was made |
 | `tests/fixtures/` | Decoded packet fixtures (hex) |
-| `packaging/` | udev rule, Arch/CachyOS `PKGBUILD`, desktop entry |
+| `packaging/` | udev rule, desktop entry and icons, `nfpm.yaml` (deb + rpm), Arch `PKGBUILD`, AppImage `AppRun` |
+| `scripts/` | Capture/decode helpers, icon generation, the release version guard |
+
+## Install
+
+Packages are built from a tag for four targets; every one installs the CLI, the
+GUI, the udev rule and the desktop entry:
+
+| target | artefact | tool |
+|---|---|---|
+| Arch / CachyOS | `gamakaylinux-<ver>-1-<arch>.pkg.tar.zst` | `makepkg` |
+| Debian / Ubuntu | `gamakaylinux_<ver>_amd64.deb` | `nfpm` |
+| Fedora / RHEL | `gamakaylinux-<ver>-1.x86_64.rpm` | `nfpm` |
+| any Linux (portable) | `GamakayLinux-<ver>-x86_64.AppImage` | `appimagetool` |
+
+`sudo pacman -U …`, `sudo apt install ./…deb`, `sudo dnf install ./…rpm`, or
+`chmod +x …AppImage && ./…AppImage`. The deb, rpm and Arch packages install the
+udev rule and reload udev for you; an AppImage cannot touch `/etc`, so with it
+either use the tools read-only or install the rule it ships
+(`/usr/share/udev/70-gamakay.rules` inside the archive) by hand.
+
+Building them yourself, and what each format does and does not bundle, is in
+[`docs/packaging.md`](docs/packaging.md):
+
+```bash
+make packages        # deb + rpm + AppImage into dist/
+make package-arch    # on Arch, via makepkg
+make package-verify  # list what actually landed in the artefacts
+```
 
 ## Build and test
 
@@ -135,7 +165,9 @@ replug the keyboard (typing is never affected). See `docs/protocol.md`.
 
 ### Permissions
 
-`/dev/hidraw*` is root-only by default. Install the udev rule once and replug:
+`/dev/hidraw*` is root-only by default. The deb, rpm and Arch packages install
+the udev rule and reload udev for you; from a source checkout, or with the
+AppImage, install it once by hand and replug:
 
 ```bash
 sudo install -Dm644 packaging/udev/70-gamakay.rules /etc/udev/rules.d/

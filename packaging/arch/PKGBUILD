@@ -1,5 +1,9 @@
 # Maintainer: GamakayLinux contributors
-# Arch/CachyOS package for GamakayLinux: the CLI, the iced GUI and the udev rule.
+# Arch/CachyOS package for GamakayLinux: the CLI, the iced GUI, the udev rule,
+# the desktop entry and its icons.
+#
+# pkgver is kept in step with the workspace Cargo.toml version by
+# scripts/check-release-version.sh; `make package-arch` builds it.
 
 pkgname=gamakaylinux
 pkgver=0.1.0
@@ -13,6 +17,7 @@ license=('GPL-3.0-or-later')
 depends=('libxkbcommon' 'wayland' 'libx11' 'libxcursor' 'libxi' 'libxrandr'
          'vulkan-icd-loader' 'libglvnd' 'ttf-dejavu')
 makedepends=('cargo' 'rust')
+install="$pkgname.install"
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 
@@ -34,6 +39,12 @@ package() {
     "$pkgdir/usr/lib/udev/rules.d/70-gamakay.rules"
   install -Dm644 packaging/gamakay.desktop \
     "$pkgdir/usr/share/applications/gamakay.desktop"
+
+  for size in 16 24 32 48 64 128 256 512; do
+    install -Dm644 "packaging/icons/hicolor/${size}x${size}/apps/gamakay.png" \
+      "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/gamakay.png"
+  done
+
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 CREDITS.md "$pkgdir/usr/share/licenses/$pkgname/CREDITS.md"
 }
