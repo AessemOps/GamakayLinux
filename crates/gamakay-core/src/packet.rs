@@ -57,10 +57,10 @@ pub fn packet(opcode: u8, payload: &[u8], mode: Checksum) -> Result<[u8; REPORT_
     // The checksum lands *inside* the report (byte 7 for Bit7, byte 8 for Bit8).
     // A payload that reaches that byte must leave it zero, or writing the
     // checksum would silently drop the payload byte sitting there.
-    if let Some(at) = mode.at() {
-        if payload.get(at - 1).is_some_and(|b| *b != 0) {
-            return Err(Error::PayloadOverChecksum { at });
-        }
+    if let Some(at) = mode.at()
+        && payload.get(at - 1).is_some_and(|b| *b != 0)
+    {
+        return Err(Error::PayloadOverChecksum { at });
     }
     let mut buf = [0u8; REPORT_LEN];
     buf[0] = opcode;
@@ -71,13 +71,13 @@ pub fn packet(opcode: u8, payload: &[u8], mode: Checksum) -> Result<[u8; REPORT_
 
 /// Verify a fully-built packet against the checksum mode it claims.
 pub fn verify_checksum(buf: &[u8; REPORT_LEN], mode: Checksum) -> Result<()> {
-    if let (Some(at), Some(expected)) = (mode.at(), mode.compute(buf)) {
-        if buf[at] != expected {
-            return Err(Error::ChecksumMismatch {
-                expected,
-                got: buf[at],
-            });
-        }
+    if let (Some(at), Some(expected)) = (mode.at(), mode.compute(buf))
+        && buf[at] != expected
+    {
+        return Err(Error::ChecksumMismatch {
+            expected,
+            got: buf[at],
+        });
     }
     Ok(())
 }

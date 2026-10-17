@@ -36,7 +36,7 @@ jobs:
   # Advisory and MSRV gates. Neither can fail the build today for a reason we
   # cannot act on (see .cargo/audit.toml), so they are informational-but-real:
   # a new advisory, or a dependency that stops compiling on the declared
-  # minimum (1.86: the Wayland stack needs it), shows up here rather than after
+  # minimum (1.88: iced 0.14 declares it), shows up here rather than after
   # a release.
   advisories:
     runs-on: ubuntu-latest
@@ -58,7 +58,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
-          toolchain: "1.86"
+          toolchain: "1.88"
       - name: The declared minimum Rust version actually compiles the tree
         run: cargo check --all-targets --locked
 

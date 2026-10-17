@@ -64,19 +64,16 @@ impl Program<Message> for ColorWheel {
     fn update(
         &self,
         state: &mut Self::State,
-        event: canvas::Event,
+        event: &canvas::Event,
         bounds: Rectangle,
         cursor: mouse::Cursor,
-    ) -> (canvas::event::Status, Option<Message>) {
+    ) -> Option<canvas::Action<Message>> {
         match event {
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 if let Some(pos) = cursor.position_in(bounds) {
                     *state = true;
                     let (h, s) = self.hit(pos, bounds);
-                    return (
-                        canvas::event::Status::Captured,
-                        Some(Message::PickColor(h, s)),
-                    );
+                    return Some(canvas::Action::publish(Message::PickColor(h, s)).and_capture());
                 }
             }
             canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
@@ -85,15 +82,12 @@ impl Program<Message> for ColorWheel {
             canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) if *state => {
                 if let Some(pos) = cursor.position_in(bounds) {
                     let (h, s) = self.hit(pos, bounds);
-                    return (
-                        canvas::event::Status::Captured,
-                        Some(Message::PickColor(h, s)),
-                    );
+                    return Some(canvas::Action::publish(Message::PickColor(h, s)).and_capture());
                 }
             }
             _ => {}
         }
-        (canvas::event::Status::Ignored, None)
+        None
     }
 
     fn draw(

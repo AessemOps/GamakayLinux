@@ -25,8 +25,7 @@ use std::time::Instant;
 
 use iced::futures::channel::mpsc::{UnboundedReceiver, unbounded};
 use iced::widget::{
-    button, column, container, horizontal_space, pick_list, row, scrollable, slider, text,
-    text_input, toggler,
+    button, column, container, pick_list, row, scrollable, slider, space, text, text_input, toggler,
 };
 use iced::{Background, Border, Color, Element, Length, Subscription, Theme};
 
@@ -41,7 +40,10 @@ use worker::{Event, Request, Summary};
 static EVENTS: Mutex<Option<UnboundedReceiver<Event>>> = Mutex::new(None);
 
 fn main() -> iced::Result {
-    iced::application("GamaKay", App::update, App::view)
+    // 0.14 takes a boot function as the first argument; the title is a builder
+    // method now.
+    iced::application(App::new, App::update, App::view)
+        .title("GamaKay")
         .subscription(App::subscription)
         .theme(App::theme)
         // Monochrome Noto Emoji, bundled: it is the only font here with the
@@ -553,9 +555,9 @@ impl App {
             column![
                 text("GamaKay").size(20),
                 text(model).size(12),
-                horizontal_space().height(Length::Fixed(6.0)),
+                space::horizontal().height(Length::Fixed(6.0)),
                 column(menu).spacing(4),
-                horizontal_space(),
+                space::horizontal(),
                 self.status_pill(),
                 button(text("Reconnect"))
                     .on_press(Message::Connect)
@@ -844,7 +846,7 @@ impl App {
                 ]
                 .spacing(6)
                 .align_y(iced::Alignment::Center),
-                horizontal_space(),
+                space::horizontal(),
                 text(hint).size(13),
             ]
             .spacing(10)
@@ -939,7 +941,7 @@ impl App {
         let buttons = row![
             record,
             button(text("Clear")).on_press(Message::RecordClear),
-            horizontal_space(),
+            space::horizontal(),
             button(text(format!("Save to macro {}", self.macro_slot + 1)))
                 .on_press(Message::MacroSave)
                 .style(button::primary),
@@ -1072,7 +1074,7 @@ fn section_toggle<'a>(
     let header = button(
         row![
             text(title).size(14),
-            horizontal_space(),
+            space::horizontal(),
             text(if open { "▾" } else { "▸" }).size(14),
         ]
         .align_y(iced::Alignment::Center)
@@ -1351,6 +1353,10 @@ mod tests {
             location: Location::Standard,
             modifiers: Modifiers::default(),
             text: None,
+            // 0.14 exposes the auto-repeat flag. The recorder still dedupes a
+            // repeated press itself (see `recorder::Recorder::down`), so this is
+            // passed for shape only — adopting it is a follow-up.
+            repeat: false,
         })
     }
 
