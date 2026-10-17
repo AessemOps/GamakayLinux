@@ -4,34 +4,6 @@ All notable changes to this project. Version numbers are the tags; the workspace
 `Cargo.toml` version is the source of truth and `scripts/check-release-version.sh`
 keeps the PKGBUILD in step with it.
 
-## Unreleased
-
-**The GUI moved to iced 0.14** (from 0.13), which is what the dependency tree
-needed: it replaces `iced_glyphon` with `cryoglyph`, taking `lru` from 0.12 to
-0.16, and clears three of the eight advisories the previous release carried
-(`lru`'s `IterMut` unsoundness, `instant`, `rustybuzz`) while removing the
-duplicate `ttf-parser` majors. It does **not** clear the unsound `lru` entirely:
-0.16.4 is still affected by RUSTSEC-2026-0253, which is patched only in
-`lru >= 0.18.2` — that needs an upstream bump, and the release profile's
-`panic = "abort"` means the reported use-after-free (which needs an unwinding
-panic) cannot occur in a shipped build. It does introduce three unmaintained-only
-warnings from `zbus`, which 0.14 now uses for Linux theme detection.
-
-The upgrade cost, measured rather than estimated: 15 compile errors, all in the
-GUI — the application builder's first argument became a boot function (the title
-moved to `.title(..)`), `horizontal_space` became `space::horizontal`,
-`canvas::Program::update` takes the event by reference and returns
-`Option<Action<Message>>` instead of `(Status, Option<Message>)`, and
-`canvas::Text`'s `horizontal_alignment`/`vertical_alignment` fields became
-`align_x`/`align_y`. Two dependency counts support the change: 417 crates in the
-lock, down from 475.
-
-The declared MSRV rises to **1.90**, which is more than iced 0.14's own 1.88:
-two crates in its tree need it (`ordered-float` 5.5 wants 1.90, `uuid` 1.28 wants
-1.89), and the CI job `cargo check`s on exactly the declared version so it cannot
-drift. That also lets the code use let chains again — the three MSRV workarounds
-from the previous pass are gone.
-
 ## 0.1.0 — 2026-10-17
 
 First release. Configure a GamaKay LK67 from Linux over USB, with a GUI and a
@@ -146,6 +118,32 @@ version guard also checks the AppStream `<release version>`; `cargo audit` and a
 declared-Minimum-Rust-Version check run in CI, with Dependabot for crates and
 actions. The declared MSRV was corrected from 1.85 to **1.86** — the Wayland
 stack requires it.
+
+**Dependencies.** The GUI moved to **iced 0.14** (from 0.13), which is what the dependency tree
+needed: it replaces `iced_glyphon` with `cryoglyph`, taking `lru` from 0.12 to
+0.16, and clears three of the eight advisories the previous release carried
+(`lru`'s `IterMut` unsoundness, `instant`, `rustybuzz`) while removing the
+duplicate `ttf-parser` majors. It does **not** clear the unsound `lru` entirely:
+0.16.4 is still affected by RUSTSEC-2026-0253, which is patched only in
+`lru >= 0.18.2` — that needs an upstream bump, and the release profile's
+`panic = "abort"` means the reported use-after-free (which needs an unwinding
+panic) cannot occur in a shipped build. It does introduce three unmaintained-only
+warnings from `zbus`, which 0.14 now uses for Linux theme detection.
+
+The upgrade cost, measured rather than estimated: 15 compile errors, all in the
+GUI — the application builder's first argument became a boot function (the title
+moved to `.title(..)`), `horizontal_space` became `space::horizontal`,
+`canvas::Program::update` takes the event by reference and returns
+`Option<Action<Message>>` instead of `(Status, Option<Message>)`, and
+`canvas::Text`'s `horizontal_alignment`/`vertical_alignment` fields became
+`align_x`/`align_y`. Two dependency counts support the change: 417 crates in the
+lock, down from 475.
+
+The declared MSRV rises to **1.90**, which is more than iced 0.14's own 1.88:
+two crates in its tree need it (`ordered-float` 5.5 wants 1.90, `uuid` 1.28 wants
+1.89), and the CI job `cargo check`s on exactly the declared version so it cannot
+drift. That also lets the code use let chains again — the three MSRV workarounds
+from the previous pass are gone.
 
 **Not in this release:** 2.4 GHz and Bluetooth. They were investigated and
 dropped — the receiver declares no HID feature report, so this protocol cannot
