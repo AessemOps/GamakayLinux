@@ -201,6 +201,8 @@ enum Message {
     /// A physical key was pressed while a slot is selected.
     Capture(iced::keyboard::key::Physical),
     PickColor(f32, f32),
+    /// A pick on the underglow wheel: same shape, different light.
+    PickEdgeColor(f32, f32),
     Tick,
     /// The recorder's slot changed.
     MacroSlotPick(SlotChoice),
@@ -334,6 +336,9 @@ impl App {
             },
             Message::PickColor(h, s) => {
                 self.color = color::to_hex(rgb8(color::hsv_to_rgb(h, s, 1.0)));
+            }
+            Message::PickEdgeColor(h, s) => {
+                self.edge_color = color::to_hex(rgb8(color::hsv_to_rgb(h, s, 1.0)));
             }
             Message::Tick => self.phase += TICK.as_secs_f32(),
             Message::SelectSlot(slot) => {
@@ -822,24 +827,12 @@ impl App {
             .width(Length::Fill)
             .align_x(iced::Alignment::Center);
 
-        let swatch: Element<Message> = container(text(" "))
-            .width(Length::Fixed(20.0))
-            .height(Length::Fixed(20.0))
-            .style(move |_: &Theme| container::Style {
-                background: Some(Background::Color(tint)),
-                border: Border {
-                    radius: 4.0.into(),
-                    width: 1.0,
-                    color: Color::from_rgb(0.4, 0.4, 0.45),
-                },
-                ..container::Style::default()
-            })
-            .into();
+        let swatch = color_swatch(tint);
         let colour: Element<Message> = column![
             text("Colour").size(12),
             row![
                 Element::from(colorwheel::wheel(
-                    colorwheel::ColorWheel::new(hue, sat),
+                    colorwheel::ColorWheel::backlight(hue, sat),
                     150.0
                 )),
                 column![
@@ -914,25 +907,55 @@ impl App {
             text("reading the underglow…").size(12).into()
         } else {
             let modes: Vec<String> = EdgeMode::ALL.iter().map(|m| m.name().to_string()).collect();
+            // The wheel starts where the colour in the box is, so a drag picks
+            // up from what the board holds (red while that is not a colour
+            // yet). Smaller than the backlight's: it sits in a row with the
+            // controls rather than on a row of its own.
+            let edge_rgb = color::parse_hex(&self.edge_color).unwrap_or([0xff, 0x00, 0x00]);
+            let (edge_hue, edge_sat) = color::rgb_to_hs(edge_rgb);
             column![
                 row![
-                    field_row(
-                        "Mode",
-                        pick_list(modes, Some(self.edge_mode.clone()), Message::EdgeMode)
-                            .width(Length::Fixed(150.0))
+                    Element::from(colorwheel::wheel(
+                        colorwheel::ColorWheel::underglow(edge_hue, edge_sat),
+                        90.0
+                    )),
+                    column![
+                        field_row(
+                            "Mode",
+                            pick_list(modes, Some(self.edge_mode.clone()), Message::EdgeMode)
+                                .width(Length::Fixed(150.0))
+                                .into()
+                        ),
+                        field_row(
+                            "Colour",
+                            row![
+                                color_swatch(Color::from_rgb8(
+                                    edge_rgb[0],
+                                    edge_rgb[1],
+                                    edge_rgb[2]
+                                )),
+                                Element::from(
+                                    text_input("#rrggbb", &self.edge_color)
+                                        .on_input(Message::EdgeColor)
+                                        .width(Length::Fixed(120.0))
+                                ),
+                                Element::from(
+                                    text(format!(
+                                        "hue {edge_hue:.0}°  sat {:.0}%",
+                                        edge_sat * 100.0
+                                    ))
+                                    .size(11)
+                                ),
+                            ]
+                            .spacing(8)
+                            .align_y(iced::Alignment::Center)
                             .into()
-                    ),
-                    field_row(
-                        "Colour",
-                        Element::from(
-                            text_input("#rrggbb", &self.edge_color)
-                                .on_input(Message::EdgeColor)
-                                .width(Length::Fixed(120.0))
-                        )
-                    ),
+                        ),
+                    ]
+                    .spacing(10),
                     Element::from(button(text("Apply")).on_press(Message::ApplyEdge)),
                 ]
-                .spacing(14)
+                .spacing(18)
                 .align_y(iced::Alignment::Center),
                 text(
                     "The board's underglow has no brightness or speed: mode and colour \
@@ -1251,6 +1274,23 @@ fn header_button(_: &Theme, status: button::Status) -> button::Style {
 }
 
 /// A label on the left and its control on the right, on a single line.
+/// A small filled square showing a colour, next to the field that sets it.
+fn color_swatch(color: Color) -> Element<'static, Message> {
+    container(text(" "))
+        .width(Length::Fixed(20.0))
+        .height(Length::Fixed(20.0))
+        .style(move |_: &Theme| container::Style {
+            background: Some(Background::Color(color)),
+            border: Border {
+                radius: 4.0.into(),
+                width: 1.0,
+                color: Color::from_rgb(0.4, 0.4, 0.45),
+            },
+            ..container::Style::default()
+        })
+        .into()
+}
+
 fn field_row<'a>(label: &'a str, control: Element<'a, Message>) -> Element<'a, Message> {
     row![
         container(text(label).size(12)).width(Length::Fixed(84.0)),

@@ -43,3 +43,29 @@ pub fn rgb_to_hs(rgb: [u8; 3]) -> (f32, f32) {
     let s = if max == 0.0 { 0.0 } else { d / max };
     (h.rem_euclid(360.0), s)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rgb8;
+
+    /// The colour wheels are positioned from the colour in their field
+    /// (`rgb_to_hs`) and a drag writes back through `hsv_to_rgb`: a pick has to
+    /// land on the colour it was shown at, or the panel would drift away from
+    /// what the board holds. Full-brightness colours survive exactly.
+    #[test]
+    fn a_wheel_position_round_trips_a_full_brightness_colour() {
+        for rgb in [[0xffu8, 0x00, 0xb6], [0xff, 0x00, 0x00], [0x00, 0xff, 0xff]] {
+            let (h, s) = rgb_to_hs(rgb);
+            assert_eq!(to_hex(rgb8(hsv_to_rgb(h, s, 1.0))), to_hex(rgb));
+        }
+
+        // A dimmer colour keeps its hue and saturation: the wheel picks at full
+        // value, so the value itself is not the wheel's to carry.
+        let dim = [0x22u8, 0xcc, 0x88];
+        let (h, s) = rgb_to_hs(dim);
+        let (h2, s2) = rgb_to_hs(rgb8(hsv_to_rgb(h, s, 1.0)));
+        assert!((h - h2).abs() < 1.5, "hue {h} -> {h2}");
+        assert!((s - s2).abs() < 0.02, "saturation {s} -> {s2}");
+    }
+}
