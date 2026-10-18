@@ -208,6 +208,7 @@ wireless transports would have needed.
 | identify / revision | yes **[HW]** |
 | info / options / debounce | yes **[HW]** |
 | lighting | yes **[HW]** |
+| underglow (edge light) | yes, mode + colour **[HW]** |
 | keymap (base + Fn) | yes **[HW]** |
 | macros | yes **[HW]** |
 | battery | — (no command over the cable) |
@@ -248,13 +249,55 @@ committed fixtures are the real captures.
 - **Speed** is the host scale 0..4; the wire value is `5 - host` for the
   backlight and `host` for the edge light. The unit's original state was host
   speed 1 (wire 4).
-- **Edge light:** the LK67 has none. `GET 0x88` still answers (a zero ack), so
-  presence comes from the device record, not the reply; `gamakay light edge`
-  is refused without `--force`.
+- **Edge light (the underglow):** the board *has* one and `SET 0x08` drives it
+  — but not the vendor software, which offers no control for it. Its
+  device-table record says the board has none, and that is what this project had
+  taken as the answer. See "Underglow (edge light)" below. **[HW]**
 - **Off** is the options bit `0x10` (`SET 0x06`), applied with
   read-modify-write; `on` clears it. Verified round-trip with the other
   options untouched.
 - **Write flow:** see "Writes (SET) — the flow matters" above.
+
+## Underglow (edge light)
+
+**Corrected 2026-10-18, on the 2026-10 firmware. [HW]** The LK67 has a bottom
+mesh and side LEDs: GamaKay's product page calls it a "mesh structure at the
+bottom of the keyboard and side RGB lights", and the manual's parameters list
+"Sidelights: RGB", adjusted from the board with `Fn`+`PgUp`. What the board
+lacks is a *vendor control* for them — the software exposes none, and its record
+for this model says the board has no side light, which is exactly why the
+feature looked absent. The firmware itself answers for them.
+
+`0x08`/`0x88` drive the underglow, in the backlight's payload shape with the
+speed **not** inverted:
+
+    [0x08, mode, speed, brightness, (option << 4) | flags, R, G, B, ck8]
+
+Measured on the test unit with the key backlight pinned to a fixed colour, so
+the two lights could be told apart by eye and by camera (a region of the frame
+was sampled per state, with a reference region to rule out the camera's
+auto-exposure):
+
+| what was written | what the LEDs did |
+|---|---|
+| static, fixed colour | solid colour; RGB honoured, `#123456` round-trips as `12 34 56` |
+| mode 0 (`off`) | underglow dark, keys lit — the two are independent |
+| mode 2 | breathing, RGB honoured |
+| mode 3 | colour cycle through the firmware's own palette (RGB ignored) |
+| mode 4 | travelling wave, RGB honoured |
+| mode 5 | moving segment(s) |
+| speed 0 vs 4 | **no difference**: the wave animates at one fixed rate |
+| brightness 4 / 1 / 0 | **no difference**: identical lit-pixel counts and colour |
+| the flags nibble (`7`/`8`) | **no visible difference**: the "rainbow" flag stays one steady colour over 45 s |
+
+So the underglow answers to **mode and colour only**. The rest of the parameter
+is stored: it survives a write, so a write must preserve it (read-modify-write)
+rather than invent it. Mode 0 is the off switch, and it does not touch the keys.
+
+`GET 0x88` returns the stored parameter on this firmware (mode, speed,
+brightness, flags, RGB); the pre-update board answered it with zeros, which is
+part of why the feature was written off. Capture:
+`tests/fixtures/lk67-edge-light.txt` — four written states, read back.
 
 ## Phase 3 hardware findings (keymap, USB cable)
 

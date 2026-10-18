@@ -187,6 +187,23 @@ pub struct LedParam {
 }
 
 impl LedParam {
+    /// A parameter that keeps every field of `from` except the mode and the
+    /// colour, which is what an underglow write must do: the LK67 stores
+    /// brightness, speed, direction and the flags nibble for the edge light but
+    /// answers to mode and colour alone, so a front-end that offers only those
+    /// two would otherwise overwrite settings it never showed — and cleared, or
+    /// silently reset to a default, they would be gone from the board.
+    pub fn with_mode_and_colour(from: &LedState, mode: u8, rgb: [u8; 3]) -> Self {
+        Self {
+            mode,
+            speed: from.speed,
+            brightness: from.brightness,
+            option: from.option,
+            rainbow: from.flags == LK67_FLAGS.rainbow,
+            rgb,
+        }
+    }
+
     /// The 7-byte payload for a backlight SET (speed inverted on the wire).
     pub fn backlight_payload(&self, flags: FlagsPair) -> Result<[u8; 7]> {
         let wire_speed = 5u8.checked_sub(self.speed).ok_or(Error::OutOfRange {
@@ -311,8 +328,19 @@ impl LedState {
         })
     }
 
+    /// The mode's name in the **backlight** table. The two lights share codes
+    /// but not names — 3 is `spectrum` here and `neon` on the edge — so an
+    /// edge state has to be named with [`Self::edge_mode_name`].
     pub fn mode_name(&self) -> String {
         match Mode::from_code(self.mode) {
+            Some(m) => m.name().to_string(),
+            None => format!("mode-{}", self.mode),
+        }
+    }
+
+    /// The mode's name in the **edge** table (the underglow's own set).
+    pub fn edge_mode_name(&self) -> String {
+        match EdgeMode::from_code(self.mode) {
             Some(m) => m.name().to_string(),
             None => format!("mode-{}", self.mode),
         }
@@ -448,6 +476,51 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    /// Only the mode and the colour may change. The fields a front-end cannot
+    /// offer — the underglow has no working brightness or speed — have to
+    /// survive the write, because the board stores them even while it ignores
+    /// them, and a write that reset them would lose them silently.
+    #[test]
+    fn an_underglow_write_keeps_the_fields_it_does_not_offer() {
+        let stored = LedState {
+            mode: 1,
+            speed: 3,
+            brightness: 4,
+            option: 2,
+            flags: LK67_FLAGS.fixed,
+            rgb: [0x12, 0x34, 0x56],
+            preset: None,
+        };
+        let p = LedParam::with_mode_and_colour(&stored, 4, [0x00, 0xff, 0xff]);
+        assert_eq!(p.mode, 4);
+        assert_eq!(p.rgb, [0x00, 0xff, 0xff]);
+        assert_eq!(
+            p.speed, 3,
+            "speed is stored even though the edge ignores it"
+        );
+        assert_eq!(p.brightness, 4);
+        assert_eq!(p.option, 2);
+        assert!(!p.rainbow, "the flags nibble is preserved too");
+    }
+
+    /// The two lights share wire codes but name them differently, and naming    /// one from the other's table prints a mode the tools then refuse to take
+    /// back: `light edge get` said `spectrum` for a code `--mode neon` sets.
+    #[test]
+    fn the_two_mode_tables_name_code_3_differently() {
+        let state = LedState {
+            mode: 3,
+            speed: 0,
+            brightness: 4,
+            option: 0,
+            flags: 7,
+            rgb: [0, 0, 0],
+            preset: None,
+        };
+        assert_eq!(state.mode_name(), "spectrum");
+        assert_eq!(state.edge_mode_name(), "neon");
+        assert_eq!(EdgeMode::from_code(3), Some(EdgeMode::Neon));
     }
 
     #[test]

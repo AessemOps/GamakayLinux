@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! GamaKay GUI (iced 0.13). All device I/O runs on the [`worker`] thread; the
+//! GamaKay GUI (iced 0.14). All device I/O runs on the [`worker`] thread; the
 //! UI only sends requests and reacts to events, so it never blocks and does no
 //! work while idle.
 
@@ -32,7 +32,7 @@ use iced::{Background, Border, Color, Element, Length, Subscription, Theme};
 use gamakay_core::keycode;
 use gamakay_core::keymap::{Slot, SlotValue};
 use gamakay_core::layout::{LK67_HEIGHT, LK67_LAYOUT, LK67_WIDTH, LayoutKey};
-use gamakay_core::light::{self, LK67_FLAGS, LedParam, LedState, Mode};
+use gamakay_core::light::{self, EdgeMode, LK67_FLAGS, LedParam, LedState, Mode};
 use gamakay_core::macros::{MACRO_SLOTS, MACRO_STREAM_MAX, MacroEvent};
 use worker::{Event, Request, Summary};
 
@@ -110,6 +110,19 @@ struct App {
     speed: u8,
     direction: u8,
     rainbow: bool,
+    // Underglow (the board's edge light: bottom mesh + side LEDs). Only mode
+    // and colour are offered, because on this board brightness, speed and the
+    // flags nibble are stored without changing anything visible. The write
+    // therefore preserves the fields it read instead of inventing values, which
+    // is why the last read is kept.
+    /// The stored underglow parameter, once read.
+    edge_store: Option<LedState>,
+    edge_mode: String,
+    edge_color: String,
+    /// Whether the underglow has been read this session. Read when the Lighting
+    /// tab is opened, not on connect: the connect path has a feature-transfer
+    /// budget (see `Request::ReadLayer`).
+    edge_loaded: bool,
     /// Seconds of preview animation time; advanced by [`TICK`].
     phase: f32,
     // Keymap editor.
@@ -172,6 +185,10 @@ enum Message {
     ApplyLight,
     LightOn,
     LightOff,
+    /// Underglow (edge light) edits.
+    EdgeMode(String),
+    EdgeColor(String),
+    ApplyEdge,
     /// Edit the Fn layer rather than the base keymap.
     FnLayer(bool),
     /// Make a keymap layer (onboard profile) active.
@@ -233,6 +250,10 @@ impl App {
             speed: 2,
             direction: 0,
             rainbow: false,
+            edge_store: None,
+            edge_mode: EdgeMode::Static.name().into(),
+            edge_color: "#ff0000".into(),
+            edge_loaded: false,
             phase: 0.0,
             fn_layer: false,
             layer: Vec::new(),
@@ -262,13 +283,7 @@ impl App {
         match message {
             Message::Tab(t) => {
                 self.tab = t;
-                // The macro list is read on demand: at connect it would be 200
-                // feature transfers before the window can do anything useful.
-                if t == Tab::Macros && !self.macros_loaded {
-                    // Not set here: a request lost to a disconnect would leave
-                    // the list empty for the rest of the session.
-                    self.send(Request::ReadMacros);
-                }
+                self.read_open_tab();
             }
             Message::Connect => {
                 self.status = "connecting…".into();
@@ -284,6 +299,9 @@ impl App {
             Message::ApplyLight => self.apply_light(),
             Message::LightOn => self.send(Request::SetBacklightOff(false)),
             Message::LightOff => self.send(Request::SetBacklightOff(true)),
+            Message::EdgeMode(m) => self.edge_mode = m,
+            Message::EdgeColor(c) => self.edge_color = c,
+            Message::ApplyEdge => self.apply_edge(),
             Message::FnLayer(fn_layer) => {
                 self.fn_layer = fn_layer;
                 // Drop anything pending for the layer being left: a stale
@@ -362,17 +380,26 @@ impl App {
                 self.profile = s.profile;
                 self.status = format!("connected: {} ({})", s.model, s.usb);
                 self.summary = Some(s);
+                // A board that appears while an on-demand tab is already open
+                // still needs its data read: the tab-change handler has already
+                // run, and a tab named on the command line never runs it at all.
+                self.read_open_tab();
             }
             Event::Disconnected => {
-                // The macro list belongs to the board that just went away.
+                // The macro list belongs to the board that just went away, and
+                // so does the underglow: showing either after an unplug would
+                // describe a board that is no longer attached.
                 self.macros_loaded = false;
                 self.macros.clear();
+                self.edge_loaded = false;
+                self.edge_store = None;
                 self.rebuild_slot_choices();
                 self.connected = false;
                 self.summary = None;
                 self.status = "no keyboard found".into();
             }
             Event::Backlight(s) => self.load_state(&s),
+            Event::Edge(s) => self.load_edge(&s),
             Event::Layer {
                 fn_layer,
                 slots,
@@ -435,6 +462,66 @@ impl App {
             rgb,
         };
         self.send(Request::SetBacklight(p));
+    }
+
+    /// Take the underglow the board reported. An unmodelled mode code keeps its
+    /// number rather than being snapped to a name, so a later apply cannot
+    /// quietly change the mode.
+    fn load_edge(&mut self, s: &LedState) {
+        self.edge_mode = EdgeMode::from_code(s.mode)
+            .map(|m| m.name().to_string())
+            .unwrap_or_else(|| s.mode.to_string());
+        self.edge_color = format!("#{:02x}{:02x}{:02x}", s.rgb[0], s.rgb[1], s.rgb[2]);
+        self.edge_store = Some(*s);
+        self.edge_loaded = true;
+    }
+
+    /// The edge mode the picker names, accepting a wire number the way the
+    /// backlight's mode field does.
+    fn edge_mode_code(&self) -> Option<u8> {
+        if let Some(code) = EdgeMode::from_name(&self.edge_mode).map(EdgeMode::code) {
+            return Some(code);
+        }
+        match self.edge_mode.trim().parse::<u8>() {
+            Ok(n) if light::is_mode_code(n) => Some(n),
+            _ => None,
+        }
+    }
+
+    fn apply_edge(&mut self) {
+        // The underglow write carries the whole parameter, so the fields this
+        // panel does not offer (brightness, speed, direction, flags) come from
+        // the board's own last read rather than from a default: inventing them
+        // would change settings the user never touched. Without that read there
+        // is nothing to preserve, so refuse instead.
+        let Some(store) = self.edge_store else {
+            self.status = "underglow not read yet; not sent".into();
+            return;
+        };
+        let Some(mode) = self.edge_mode_code() else {
+            self.status = format!("unknown underglow mode {:?}; not sent", self.edge_mode);
+            return;
+        };
+        let Some(rgb) = color::parse_hex(&self.edge_color) else {
+            self.status = format!("colour {:?} is not #rrggbb; not sent", self.edge_color);
+            return;
+        };
+        self.send(Request::SetEdge(LedParam::with_mode_and_colour(
+            &store, mode, rgb,
+        )));
+    }
+
+    /// Read what the open tab shows but the connect path does not fetch: the
+    /// underglow (one transfer) and the macro list (200). Fetching them on
+    /// demand is what keeps the connect burst, and its risk of stalling the
+    /// board's control endpoint, small. The flags are not set here: a request
+    /// lost to a disconnect would leave the panel empty for the session.
+    fn read_open_tab(&mut self) {
+        match self.tab {
+            Tab::Lighting if !self.edge_loaded => self.send(Request::ReadEdge),
+            Tab::Macros if !self.macros_loaded => self.send(Request::ReadMacros),
+            _ => {}
+        }
     }
 
     /// Bind the selected slot. The write is fire-and-forget, so the new value
@@ -812,9 +899,49 @@ impl App {
             .spacing(16)
             .width(Length::Fill);
 
+        // Only what the board honours is offered: mode and colour. Brightness,
+        // speed and the rainbow flag are stored for the underglow but change
+        // nothing visible on it, so the write keeps whatever the board has
+        // rather than pretending they do something (see docs/protocol.md ->
+        // "Underglow (edge light)").
+        let underglow: Element<Message> = if self.edge_store.is_none() {
+            text("reading the underglow…").size(12).into()
+        } else {
+            let modes: Vec<String> = EdgeMode::ALL.iter().map(|m| m.name().to_string()).collect();
+            column![
+                row![
+                    field_row(
+                        "Mode",
+                        pick_list(modes, Some(self.edge_mode.clone()), Message::EdgeMode)
+                            .width(Length::Fixed(150.0))
+                            .into()
+                    ),
+                    field_row(
+                        "Colour",
+                        Element::from(
+                            text_input("#rrggbb", &self.edge_color)
+                                .on_input(Message::EdgeColor)
+                                .width(Length::Fixed(120.0))
+                        )
+                    ),
+                    Element::from(button(text("Apply")).on_press(Message::ApplyEdge)),
+                ]
+                .spacing(14)
+                .align_y(iced::Alignment::Center),
+                text(
+                    "The board's underglow has no brightness or speed: mode and colour \
+                     are the only controls it answers to."
+                )
+                .size(11),
+            ]
+            .spacing(8)
+            .into()
+        };
+
         column![
             section("Preview".to_string(), preview.into()),
             section("Backlight".to_string(), backlight.into()),
+            section("Underglow".to_string(), underglow),
         ]
         .spacing(12)
         .into()

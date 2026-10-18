@@ -1,0 +1,32 @@
+# GamaKay LK67, wired USB (3151:4003, hidraw0), 2026-10 firmware, board id 290:
+# real 0x88 (edge light — the underglow) GET replies captured on hardware.
+#
+# One exchange per line: <opcode>: <64-byte reply, hex>. The report id (0) is
+# stripped. Each reply is preceded by a comment naming the state that was
+# written with `gamakay light edge set … --force` just before the read, so the
+# file also pins the round-trip: what goes out comes back.
+#
+# Captured with the documented reader:
+#   cargo run -p gamakay-hidraw --example raw -- /dev/hidraw0 0x88
+#
+# Layout, the same shape as the backlight's 0x87:
+#   [opcode, mode, speed, brightness, (option << 4) | flags, R, G, B, 0, …]
+# Unlike the other GETs no request-checksum byte sits in the reply, because the
+# RGB data runs through byte 7: byte 8 is 0 and bytes 9..63 are unused. Edge
+# speed is *not* inverted (host 0..4 goes out as 0..4); see
+# docs/protocol.md -> "LED parameters".
+#
+# The LK67 has a bottom mesh and side LEDs, and its firmware drives them through
+# 0x08/0x88 even though the vendor software exposes no control for them.
+# Brightness, speed and the flags nibble are stored but make no visible
+# difference on this board; only mode and colour do (docs/protocol.md ->
+# "Underglow (edge light)").
+#
+# Wrote: static, fixed #123456, brightness 4, speed 2
+88: 88 01 02 04 07 12 34 56 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+# Wrote: off (mode 0), the stored colour and speed kept
+88: 88 00 02 04 07 12 34 56 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+# Wrote: breathing, fixed #ff00ff, brightness 4, speed 3
+88: 88 02 03 04 07 ff 00 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+# Wrote: mode 3, rainbow flag, #ff00b6, brightness 4, speed 3
+88: 88 03 03 04 08 ff 00 b6 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00

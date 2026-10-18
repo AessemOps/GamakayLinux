@@ -25,6 +25,7 @@ keyboard's own memory over USB, with a GUI and a scriptable CLI.
 | | |
 |---|---|
 | **Lighting** | Onboard modes with brightness, speed and direction, rainbow, and a colour picker with a live preview of the board. |
+| **Underglow** | The board's side and bottom-mesh LEDs: mode and colour. GamaKay's own software leaves these LED's alone — they are driven from here instead. |
 | **Keymap** | Remap any key on the base **and Fn** layers, across the board's **8 profiles**. Remap by pressing a key on the keyboard, or pick one from a VIA-style list of ~115 keys — media, modifiers, macros, profiles. |
 | **Macros** | 50 onboard slots with a **recorder**: press Record, type the macro, press Stop, save it to a slot. Delays are captured, so the take keeps your typing rhythm. A CLI step DSL covers scripted cases. |
 | **Device info** | Firmware, active profile, the options the firmware exposes. |

@@ -26,7 +26,7 @@ guard refuses a block-list of destructive and bootloader opcodes by name.
 | `crates/gamakay-core/` | Protocol packets/checksums, opcode table, device table, safety guard, `Transport` trait, `Session`, decode/encode, `MockTransport` |
 | `crates/gamakay-hidraw/` | Linux hidraw transport: sysfs enumeration, report-descriptor parse, `HIDIOCSFEATURE`/`HIDIOCGFEATURE` ioctls, plus the `raw` example |
 | `crates/gamakay-cli/` | The `gamakay` binary (`clap`) |
-| `crates/gamakay-gui/` | The iced 0.13 app (`gamakay-gui`): tabs over the same core, a keyboard canvas, device I/O on a worker thread |
+| `crates/gamakay-gui/` | The iced 0.14 app (`gamakay-gui`): tabs over the same core, a keyboard canvas, an underglow panel, device I/O on a worker thread |
 | `docs/protocol.md` | Command reference, byte layouts, transport matrix — the **allow-list source of truth** |
 | `docs/re-workflow.md` | How the protocol was captured and how to extend it |
 | `tests/fixtures/` | Decoded packet fixtures (hex captured from hardware) |
@@ -64,6 +64,7 @@ gamakay info                     # identify + read current settings
 gamakay --device /dev/hidraw0 info
 gamakay light                    # show backlight (and edge light)
 gamakay light set --mode wave --color ff0000 --brightness 3 --speed 2
+gamakay light edge set --mode breathing --color 00ffff   # the underglow
 gamakay apply ~/.config/gamakay/profiles/<name>.toml
 gamakay keymap get               # dump the base layer
 gamakay keymap set --key CapsLock --to Esc
