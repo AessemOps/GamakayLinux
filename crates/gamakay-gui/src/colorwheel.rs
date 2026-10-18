@@ -13,14 +13,45 @@ const SAT_STEPS: usize = 14;
 const MARGIN: f32 = 6.0;
 
 /// The wheel, positioned at the current hue/saturation.
+/// Which picker a wheel is. Each emits its own light's message, so one widget
+/// type serves both without either stealing the other's colour.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Target {
+    Backlight,
+    Underglow,
+}
+
 pub struct ColorWheel {
     pub hue: f32,
     pub sat: f32,
+    pub target: Target,
 }
 
 impl ColorWheel {
-    pub fn new(hue: f32, sat: f32) -> Self {
-        Self { hue, sat }
+    /// A wheel that sets the backlight colour.
+    pub fn backlight(hue: f32, sat: f32) -> Self {
+        Self {
+            hue,
+            sat,
+            target: Target::Backlight,
+        }
+    }
+
+    /// A wheel that sets the underglow (edge light) colour.
+    pub fn underglow(hue: f32, sat: f32) -> Self {
+        Self {
+            hue,
+            sat,
+            target: Target::Underglow,
+        }
+    }
+
+    /// The message a pick sends, for this wheel's light.
+    fn picked(&self, h: f32, s: f32) -> Message {
+        match self.target {
+            Target::Backlight => Message::PickColor(h, s),
+            Target::Underglow => Message::PickEdgeColor(h, s),
+        }
     }
 
     fn radius(bounds: Rectangle) -> f32 {
@@ -73,7 +104,7 @@ impl Program<Message> for ColorWheel {
                 if let Some(pos) = cursor.position_in(bounds) {
                     *state = true;
                     let (h, s) = self.hit(pos, bounds);
-                    return Some(canvas::Action::publish(Message::PickColor(h, s)).and_capture());
+                    return Some(canvas::Action::publish(self.picked(h, s)).and_capture());
                 }
             }
             canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
@@ -82,7 +113,7 @@ impl Program<Message> for ColorWheel {
             canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) if *state => {
                 if let Some(pos) = cursor.position_in(bounds) {
                     let (h, s) = self.hit(pos, bounds);
-                    return Some(canvas::Action::publish(Message::PickColor(h, s)).and_capture());
+                    return Some(canvas::Action::publish(self.picked(h, s)).and_capture());
                 }
             }
             _ => {}
@@ -160,10 +191,24 @@ mod tests {
     /// A canvas placed away from the origin: `bounds` is absolute while the
     /// cursor position is local, so `point` and `hit` must both work in the
     /// widget's own frame.
+    /// Each wheel publishes its own light's message: dragging the underglow
+    /// wheel must not repaint the key backlight.
+    #[test]
+    fn each_wheel_publishes_its_own_message() {
+        assert!(matches!(
+            ColorWheel::backlight(0.0, 1.0).picked(10.0, 0.5),
+            Message::PickColor(_, _)
+        ));
+        assert!(matches!(
+            ColorWheel::underglow(0.0, 1.0).picked(10.0, 0.5),
+            Message::PickEdgeColor(_, _)
+        ));
+    }
+
     #[test]
     fn hit_inverts_point_inside_the_widget() {
         let bounds = Rectangle::new(Point::new(630.0, 560.0), Size::new(150.0, 150.0));
-        let w = ColorWheel::new(0.0, 0.0);
+        let w = ColorWheel::backlight(0.0, 0.0);
         for &(h, s) in &[(0.0f32, 1.0f32), (90.0, 0.5), (200.0, 0.8), (330.0, 0.3)] {
             let p = w.point(bounds, h, s);
             assert!(

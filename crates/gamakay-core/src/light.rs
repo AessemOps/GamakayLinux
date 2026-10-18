@@ -100,6 +100,14 @@ impl Mode {
     pub fn from_code(code: u8) -> Option<Mode> {
         Mode::ALL.iter().copied().find(|m| m.code() == code)
     }
+
+    /// The name of a mode code, including one this build does not model: the
+    /// board can still hold it, and this is what a read-back prints.
+    pub fn name_for_code(code: u8) -> String {
+        Mode::from_code(code)
+            .map(|m| m.name().to_string())
+            .unwrap_or_else(|| format!("mode-{code}"))
+    }
 }
 
 /// Edge-light modes. Different set, same packet layout.
@@ -146,6 +154,13 @@ impl EdgeMode {
     pub fn from_code(code: u8) -> Option<EdgeMode> {
         EdgeMode::ALL.iter().copied().find(|m| m.code() == code)
     }
+
+    /// The name of an edge mode code, including one this build does not model.
+    pub fn name_for_code(code: u8) -> String {
+        EdgeMode::from_code(code)
+            .map(|m| m.name().to_string())
+            .unwrap_or_else(|| format!("mode-{code}"))
+    }
 }
 
 /// The fixed/rainbow flags-nibble pair. LK67: `7` fixed, `8` rainbow **[HW]**.
@@ -173,6 +188,25 @@ pub const fn is_mode_code(code: u8) -> bool {
     code >= 1 && code <= MAX_MODE_CODE
 }
 
+/// Whether the edge light carries `code`. Its range starts at zero, where the
+/// backlight's does not: `0` is the underglow's off state, not "nothing".
+pub const fn is_edge_mode_code(code: u8) -> bool {
+    code <= MAX_MODE_CODE
+}
+
+/// The edge mode a name or a wire number selects, or `None`. One rule, so the
+/// CLI and the GUI cannot disagree about what the underglow accepts — and so
+/// that its off state works as `off` and as `0`.
+pub fn edge_mode_code(name_or_code: &str) -> Option<u8> {
+    if let Some(m) = EdgeMode::from_name(name_or_code) {
+        return Some(m.code());
+    }
+    match name_or_code.trim().parse::<u8>() {
+        Ok(n) if is_edge_mode_code(n) => Some(n),
+        _ => None,
+    }
+}
+
 /// What a caller sets. `speed` and `brightness` are the host scale (0..4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LedParam {
@@ -187,6 +221,23 @@ pub struct LedParam {
 }
 
 impl LedParam {
+    /// A parameter that keeps every field of `from` except the mode and the
+    /// colour, which is what an underglow write must do: the LK67 stores
+    /// brightness, speed, direction and the flags nibble for the edge light but
+    /// answers to mode and colour alone, so a front-end that offers only those
+    /// two would otherwise overwrite settings it never showed — and cleared, or
+    /// silently reset to a default, they would be gone from the board.
+    pub fn with_mode_and_colour(from: &LedState, mode: u8, rgb: [u8; 3]) -> Self {
+        Self {
+            mode,
+            speed: from.speed,
+            brightness: from.brightness,
+            option: from.option,
+            rainbow: from.flags == LK67_FLAGS.rainbow,
+            rgb,
+        }
+    }
+
     /// The 7-byte payload for a backlight SET (speed inverted on the wire).
     pub fn backlight_payload(&self, flags: FlagsPair) -> Result<[u8; 7]> {
         let wire_speed = 5u8.checked_sub(self.speed).ok_or(Error::OutOfRange {
@@ -311,11 +362,16 @@ impl LedState {
         })
     }
 
+    /// The mode's name in the **backlight** table. The two lights share codes
+    /// but not names — 3 is `spectrum` here and `neon` on the edge — so an
+    /// edge state has to be named with [`Self::edge_mode_name`].
     pub fn mode_name(&self) -> String {
-        match Mode::from_code(self.mode) {
-            Some(m) => m.name().to_string(),
-            None => format!("mode-{}", self.mode),
-        }
+        Mode::name_for_code(self.mode)
+    }
+
+    /// The mode's name in the **edge** table (the underglow's own set).
+    pub fn edge_mode_name(&self) -> String {
+        EdgeMode::name_for_code(self.mode)
     }
 }
 
@@ -448,6 +504,79 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    /// Only the mode and the colour may change. The fields a front-end cannot
+    /// offer — the underglow has no working brightness or speed — have to
+    /// survive the write, because the board stores them even while it ignores
+    /// them, and a write that reset them would lose them silently.
+    #[test]
+    fn an_underglow_write_keeps_the_fields_it_does_not_offer() {
+        let stored = LedState {
+            mode: 1,
+            speed: 3,
+            brightness: 4,
+            option: 2,
+            flags: LK67_FLAGS.fixed,
+            rgb: [0x12, 0x34, 0x56],
+            preset: None,
+        };
+        let p = LedParam::with_mode_and_colour(&stored, 4, [0x00, 0xff, 0xff]);
+        assert_eq!(p.mode, 4);
+        assert_eq!(p.rgb, [0x00, 0xff, 0xff]);
+        assert_eq!(
+            p.speed, 3,
+            "speed is stored even though the edge ignores it"
+        );
+        assert_eq!(p.brightness, 4);
+        assert_eq!(p.option, 2);
+        assert!(!p.rainbow, "the flags nibble is preserved too");
+    }
+
+    /// A code this build does not model still names itself: the board can hold
+    /// a mode another tool wrote, and a read-back has to print something.
+    #[test]
+    fn unmodelled_codes_name_themselves() {
+        assert_eq!(Mode::name_for_code(1), "static");
+        assert_eq!(Mode::name_for_code(99), "mode-99");
+        assert_eq!(EdgeMode::name_for_code(0), "off");
+        assert_eq!(EdgeMode::name_for_code(24), "mode-24");
+    }
+
+    /// The rule both front-ends resolve an edge mode through. Its off state is
+    /// code 0, which the backlight's range rejects, so this is the part that
+    /// used to make `--mode 0` fail while the docs called 0 the off switch.
+    #[test]
+    fn the_edge_mode_rule_accepts_its_own_off_state() {
+        assert_eq!(edge_mode_code("off"), Some(0));
+        assert_eq!(edge_mode_code("0"), Some(0));
+        assert_eq!(edge_mode_code("neon"), Some(3));
+        assert_eq!(edge_mode_code("3"), Some(3));
+        assert_eq!(edge_mode_code(" 2 "), Some(2));
+        assert_eq!(edge_mode_code("26"), None);
+        assert_eq!(edge_mode_code("nonsense"), None);
+        assert!(is_edge_mode_code(0));
+        assert!(!is_mode_code(0), "the backlight has no mode 0");
+        assert!(is_edge_mode_code(MAX_MODE_CODE));
+        assert!(!is_edge_mode_code(MAX_MODE_CODE + 1));
+    }
+
+    /// The two lights share wire codes but name them differently, and naming    /// one from the other's table prints a mode the tools then refuse to take
+    /// back: `light edge get` said `spectrum` for a code `--mode neon` sets.
+    #[test]
+    fn the_two_mode_tables_name_code_3_differently() {
+        let state = LedState {
+            mode: 3,
+            speed: 0,
+            brightness: 4,
+            option: 0,
+            flags: 7,
+            rgb: [0, 0, 0],
+            preset: None,
+        };
+        assert_eq!(state.mode_name(), "spectrum");
+        assert_eq!(state.edge_mode_name(), "neon");
+        assert_eq!(EdgeMode::from_code(3), Some(EdgeMode::Neon));
     }
 
     #[test]

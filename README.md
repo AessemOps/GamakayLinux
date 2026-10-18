@@ -6,8 +6,9 @@
 [![license: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 
 GamaKay only ships a Windows Electron app for the LK67. This is a native Rust
-replacement: lighting, keymaps, macros and device info, written straight to the
-keyboard's own memory over USB, with a GUI and a scriptable CLI.
+replacement: lighting and the underglow, keymaps, macros and device info,
+written straight to the keyboard's own memory over USB, with a GUI and a
+scriptable CLI.
 
 - **Nothing stays resident.** Every command writes to onboard memory and exits —
   no tray daemon, no background service, no kernel module.
@@ -25,12 +26,13 @@ keyboard's own memory over USB, with a GUI and a scriptable CLI.
 | | |
 |---|---|
 | **Lighting** | Onboard modes with brightness, speed and direction, rainbow, and a colour picker with a live preview of the board. |
+| **Underglow** | The board's side and bottom-mesh LEDs — the ones GamaKay's own software leaves alone — with their own modes and a colour wheel. |
 | **Keymap** | Remap any key on the base **and Fn** layers, across the board's **8 profiles**. Remap by pressing a key on the keyboard, or pick one from a VIA-style list of ~115 keys — media, modifiers, macros, profiles. |
 | **Macros** | 50 onboard slots with a **recorder**: press Record, type the macro, press Stop, save it to a slot. Delays are captured, so the take keeps your typing rhythm. A CLI step DSL covers scripted cases. |
 | **Device info** | Firmware, active profile, the options the firmware exposes. |
 | **GUI + CLI** | An iced app for interactive work; a `gamakay` command for scripts, profiles and CI. |
 
-![The lighting tab: the board's live preview, its controls, and the colour wheel](docs/images/lighting.png)
+![The lighting tab: the board's live preview, its controls, the backlight colour wheel, and the underglow panel with a wheel of its own](docs/images/lighting.png)
 
 ## Install
 
@@ -63,6 +65,7 @@ inside the archive), or run the tools as root.
 gamakay list                     # every HID node, with the board marked
 gamakay info                     # model, firmware, active profile
 gamakay light set --color ff00aa --brightness 3 --mode wave
+gamakay light edge set --mode breathing --color 00d5ff   # the underglow
 gamakay keymap set --slot 9 --to Esc        # by slot
 gamakay keymap get --fn                     # the Fn layer
 gamakay keymap reset --yes                  # back to the board's defaults

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! GamaKay GUI (iced 0.13). All device I/O runs on the [`worker`] thread; the
+//! GamaKay GUI (iced 0.14). All device I/O runs on the [`worker`] thread; the
 //! UI only sends requests and reacts to events, so it never blocks and does no
 //! work while idle.
 
@@ -32,7 +32,7 @@ use iced::{Background, Border, Color, Element, Length, Subscription, Theme};
 use gamakay_core::keycode;
 use gamakay_core::keymap::{Slot, SlotValue};
 use gamakay_core::layout::{LK67_HEIGHT, LK67_LAYOUT, LK67_WIDTH, LayoutKey};
-use gamakay_core::light::{self, LK67_FLAGS, LedParam, LedState, Mode};
+use gamakay_core::light::{self, EdgeMode, LK67_FLAGS, LedParam, LedState, Mode};
 use gamakay_core::macros::{MACRO_SLOTS, MACRO_STREAM_MAX, MacroEvent};
 use worker::{Event, Request, Summary};
 
@@ -110,6 +110,19 @@ struct App {
     speed: u8,
     direction: u8,
     rainbow: bool,
+    // Underglow (the board's edge light: bottom mesh + side LEDs). Only mode
+    // and colour are offered, because on this board brightness, speed and the
+    // flags nibble are stored without changing anything visible. The write
+    // therefore preserves the fields it read instead of inventing values, which
+    // is why the last read is kept.
+    /// The stored underglow parameter, once read.
+    edge_store: Option<LedState>,
+    edge_mode: String,
+    edge_color: String,
+    /// Whether the underglow has been read this session. Read when the Lighting
+    /// tab is opened, not on connect: the connect path has a feature-transfer
+    /// budget (see `Request::ReadLayer`).
+    edge_loaded: bool,
     /// Seconds of preview animation time; advanced by [`TICK`].
     phase: f32,
     // Keymap editor.
@@ -172,6 +185,10 @@ enum Message {
     ApplyLight,
     LightOn,
     LightOff,
+    /// Underglow (edge light) edits.
+    EdgeMode(String),
+    EdgeColor(String),
+    ApplyEdge,
     /// Edit the Fn layer rather than the base keymap.
     FnLayer(bool),
     /// Make a keymap layer (onboard profile) active.
@@ -184,6 +201,8 @@ enum Message {
     /// A physical key was pressed while a slot is selected.
     Capture(iced::keyboard::key::Physical),
     PickColor(f32, f32),
+    /// A pick on the underglow wheel: same shape, different light.
+    PickEdgeColor(f32, f32),
     Tick,
     /// The recorder's slot changed.
     MacroSlotPick(SlotChoice),
@@ -233,6 +252,10 @@ impl App {
             speed: 2,
             direction: 0,
             rainbow: false,
+            edge_store: None,
+            edge_mode: EdgeMode::Static.name().into(),
+            edge_color: "#ff0000".into(),
+            edge_loaded: false,
             phase: 0.0,
             fn_layer: false,
             layer: Vec::new(),
@@ -262,13 +285,7 @@ impl App {
         match message {
             Message::Tab(t) => {
                 self.tab = t;
-                // The macro list is read on demand: at connect it would be 200
-                // feature transfers before the window can do anything useful.
-                if t == Tab::Macros && !self.macros_loaded {
-                    // Not set here: a request lost to a disconnect would leave
-                    // the list empty for the rest of the session.
-                    self.send(Request::ReadMacros);
-                }
+                self.read_open_tab();
             }
             Message::Connect => {
                 self.status = "connecting…".into();
@@ -284,6 +301,9 @@ impl App {
             Message::ApplyLight => self.apply_light(),
             Message::LightOn => self.send(Request::SetBacklightOff(false)),
             Message::LightOff => self.send(Request::SetBacklightOff(true)),
+            Message::EdgeMode(m) => self.edge_mode = m,
+            Message::EdgeColor(c) => self.edge_color = c,
+            Message::ApplyEdge => self.apply_edge(),
             Message::FnLayer(fn_layer) => {
                 self.fn_layer = fn_layer;
                 // Drop anything pending for the layer being left: a stale
@@ -316,6 +336,9 @@ impl App {
             },
             Message::PickColor(h, s) => {
                 self.color = color::to_hex(rgb8(color::hsv_to_rgb(h, s, 1.0)));
+            }
+            Message::PickEdgeColor(h, s) => {
+                self.edge_color = color::to_hex(rgb8(color::hsv_to_rgb(h, s, 1.0)));
             }
             Message::Tick => self.phase += TICK.as_secs_f32(),
             Message::SelectSlot(slot) => {
@@ -362,17 +385,27 @@ impl App {
                 self.profile = s.profile;
                 self.status = format!("connected: {} ({})", s.model, s.usb);
                 self.summary = Some(s);
+                // Whatever the on-demand tabs hold belongs to the board that was
+                // attached: a Reconnect re-opens the device without ever
+                // emitting `Disconnected`, so it has to be dropped here too or
+                // the panel would describe the previous board and its stored
+                // fields would be what the next Apply writes.
+                self.forget_on_demand();
+                // A board that appears while an on-demand tab is already open
+                // still needs its data read: the tab-change handler has already
+                // run, and a tab named on the command line never runs it at all.
+                self.read_open_tab();
             }
             Event::Disconnected => {
-                // The macro list belongs to the board that just went away.
-                self.macros_loaded = false;
-                self.macros.clear();
-                self.rebuild_slot_choices();
+                // Showing either one after an unplug would describe a board that
+                // is no longer attached.
+                self.forget_on_demand();
                 self.connected = false;
                 self.summary = None;
                 self.status = "no keyboard found".into();
             }
             Event::Backlight(s) => self.load_state(&s),
+            Event::Edge(s) => self.load_edge(&s),
             Event::Layer {
                 fn_layer,
                 slots,
@@ -435,6 +468,71 @@ impl App {
             rgb,
         };
         self.send(Request::SetBacklight(p));
+    }
+
+    /// Take the underglow the board reported. An unmodelled mode code keeps its
+    /// number rather than being snapped to a name, so a later apply cannot
+    /// quietly change the mode.
+    fn load_edge(&mut self, s: &LedState) {
+        self.edge_mode = EdgeMode::from_code(s.mode)
+            .map(|m| m.name().to_string())
+            .unwrap_or_else(|| s.mode.to_string());
+        self.edge_color = format!("#{:02x}{:02x}{:02x}", s.rgb[0], s.rgb[1], s.rgb[2]);
+        self.edge_store = Some(*s);
+        self.edge_loaded = true;
+    }
+
+    /// The edge mode the picker names, accepting a wire number. The rule is
+    /// core's, so this panel and `light edge` resolve a name or a number the
+    /// same way — including the underglow's off state, which is code 0.
+    fn edge_mode_code(&self) -> Option<u8> {
+        light::edge_mode_code(&self.edge_mode)
+    }
+
+    fn apply_edge(&mut self) {
+        // The underglow write carries the whole parameter, so the fields this
+        // panel does not offer (brightness, speed, direction, flags) come from
+        // the board's own last read rather than from a default: inventing them
+        // would change settings the user never touched. Without that read there
+        // is nothing to preserve, so refuse instead.
+        let Some(store) = self.edge_store else {
+            self.status = "underglow not read yet; not sent".into();
+            return;
+        };
+        let Some(mode) = self.edge_mode_code() else {
+            self.status = format!("unknown underglow mode {:?}; not sent", self.edge_mode);
+            return;
+        };
+        let Some(rgb) = color::parse_hex(&self.edge_color) else {
+            self.status = format!("colour {:?} is not #rrggbb; not sent", self.edge_color);
+            return;
+        };
+        self.send(Request::SetEdge(LedParam::with_mode_and_colour(
+            &store, mode, rgb,
+        )));
+    }
+
+    /// Forget what the on-demand tabs hold. Both belong to the board they were
+    /// read from, which is not necessarily the board attached now.
+    fn forget_on_demand(&mut self) {
+        self.macros_loaded = false;
+        self.macros.clear();
+        self.edge_loaded = false;
+        self.edge_store = None;
+        self.rebuild_slot_choices();
+    }
+
+    /// Read what the open tab shows but the connect path does not fetch: the
+    /// underglow (one transfer) and the macro list (200). Fetching them on
+    /// demand is what keeps the connect burst, and its risk of stalling the
+    /// board's control endpoint, small. The flags are not set here: a request
+    /// lost to a disconnect would leave the panel empty for the session.
+    fn read_open_tab(&mut self) {
+        match self.tab {
+            Tab::Lighting if !self.edge_loaded => self.send(Request::ReadEdge),
+            Tab::Macros if !self.macros_loaded => self.send(Request::ReadMacros),
+            _ => {}
+        }
     }
 
     /// Bind the selected slot. The write is fire-and-forget, so the new value
@@ -729,24 +827,12 @@ impl App {
             .width(Length::Fill)
             .align_x(iced::Alignment::Center);
 
-        let swatch: Element<Message> = container(text(" "))
-            .width(Length::Fixed(20.0))
-            .height(Length::Fixed(20.0))
-            .style(move |_: &Theme| container::Style {
-                background: Some(Background::Color(tint)),
-                border: Border {
-                    radius: 4.0.into(),
-                    width: 1.0,
-                    color: Color::from_rgb(0.4, 0.4, 0.45),
-                },
-                ..container::Style::default()
-            })
-            .into();
+        let swatch = color_swatch(tint);
         let colour: Element<Message> = column![
             text("Colour").size(12),
             row![
                 Element::from(colorwheel::wheel(
-                    colorwheel::ColorWheel::new(hue, sat),
+                    colorwheel::ColorWheel::backlight(hue, sat),
                     150.0
                 )),
                 column![
@@ -812,9 +898,79 @@ impl App {
             .spacing(16)
             .width(Length::Fill);
 
+        // Only what the board honours is offered: mode and colour. Brightness,
+        // speed and the rainbow flag are stored for the underglow but change
+        // nothing visible on it, so the write keeps whatever the board has
+        // rather than pretending they do something (see docs/protocol.md ->
+        // "Underglow (edge light)").
+        let underglow: Element<Message> = if self.edge_store.is_none() {
+            text("reading the underglow…").size(12).into()
+        } else {
+            let modes: Vec<String> = EdgeMode::ALL.iter().map(|m| m.name().to_string()).collect();
+            // The wheel starts where the colour in the box is, so a drag picks
+            // up from what the board holds (red while that is not a colour
+            // yet). Smaller than the backlight's: it sits in a row with the
+            // controls rather than on a row of its own.
+            let edge_rgb = color::parse_hex(&self.edge_color).unwrap_or([0xff, 0x00, 0x00]);
+            let (edge_hue, edge_sat) = color::rgb_to_hs(edge_rgb);
+            column![
+                row![
+                    Element::from(colorwheel::wheel(
+                        colorwheel::ColorWheel::underglow(edge_hue, edge_sat),
+                        90.0
+                    )),
+                    column![
+                        field_row(
+                            "Mode",
+                            pick_list(modes, Some(self.edge_mode.clone()), Message::EdgeMode)
+                                .width(Length::Fixed(150.0))
+                                .into()
+                        ),
+                        field_row(
+                            "Colour",
+                            row![
+                                color_swatch(Color::from_rgb8(
+                                    edge_rgb[0],
+                                    edge_rgb[1],
+                                    edge_rgb[2]
+                                )),
+                                Element::from(
+                                    text_input("#rrggbb", &self.edge_color)
+                                        .on_input(Message::EdgeColor)
+                                        .width(Length::Fixed(120.0))
+                                ),
+                                Element::from(
+                                    text(format!(
+                                        "hue {edge_hue:.0}°  sat {:.0}%",
+                                        edge_sat * 100.0
+                                    ))
+                                    .size(11)
+                                ),
+                            ]
+                            .spacing(8)
+                            .align_y(iced::Alignment::Center)
+                            .into()
+                        ),
+                    ]
+                    .spacing(10),
+                    Element::from(button(text("Apply")).on_press(Message::ApplyEdge)),
+                ]
+                .spacing(18)
+                .align_y(iced::Alignment::Center),
+                text(
+                    "The board's underglow has no brightness or speed: mode and colour \
+                     are the only controls it answers to."
+                )
+                .size(11),
+            ]
+            .spacing(8)
+            .into()
+        };
+
         column![
             section("Preview".to_string(), preview.into()),
             section("Backlight".to_string(), backlight.into()),
+            section("Underglow".to_string(), underglow),
         ]
         .spacing(12)
         .into()
@@ -1118,6 +1274,23 @@ fn header_button(_: &Theme, status: button::Status) -> button::Style {
 }
 
 /// A label on the left and its control on the right, on a single line.
+/// A small filled square showing a colour, next to the field that sets it.
+fn color_swatch(color: Color) -> Element<'static, Message> {
+    container(text(" "))
+        .width(Length::Fixed(20.0))
+        .height(Length::Fixed(20.0))
+        .style(move |_: &Theme| container::Style {
+            background: Some(Background::Color(color)),
+            border: Border {
+                radius: 4.0.into(),
+                width: 1.0,
+                color: Color::from_rgb(0.4, 0.4, 0.45),
+            },
+            ..container::Style::default()
+        })
+        .into()
+}
+
 fn field_row<'a>(label: &'a str, control: Element<'a, Message>) -> Element<'a, Message> {
     row![
         container(text(label).size(12)).width(Length::Fixed(84.0)),

@@ -17,7 +17,8 @@ pub enum LightCmd {
     Get,
     /// Set the backlight.
     Set(LightArgs),
-    /// The edge (side) light.
+    /// The edge (side) light — the board's underglow.
+    #[command(visible_alias = "underglow")]
     Edge {
         #[command(subcommand)]
         action: EdgeCmd,
@@ -84,10 +85,10 @@ fn show(cli: &Cli) -> Result<()> {
     let mut dev = HidrawDevice::open(&info.path)?;
     let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
     let led = s.led_param().context("reading backlight (0x87)")?;
-    print_state("backlight", &led);
+    print_state("backlight", &led, false);
     if board_has_edge(&mut s) {
         match s.edge_param() {
-            Ok(e) => print_state("edge", &e),
+            Ok(e) => print_state("edge", &e, true),
             Err(_) => println!("edge:       (unreadable)"),
         }
     } else {
@@ -97,7 +98,10 @@ fn show(cli: &Cli) -> Result<()> {
 }
 
 /// Presence of an edge light is a property of the board, not of a GET reply:
-/// the firmware answers `0x88` even when no edge LEDs are fitted.
+/// the firmware answers `0x88` for parts it lacks, and the LK67's firmware
+/// answers with real stored data (`[mode, speed, brightness, flags, R, G, B]`).
+/// The record follows the hardware — see the field's note and
+/// docs/protocol.md -> "Underglow (edge light)".
 pub(crate) fn board_has_edge(s: &mut Session<'_>) -> bool {
     s.device_id()
         .ok()
@@ -194,12 +198,23 @@ pub(crate) fn merge(cur: &LedState, args: &LightArgs, edge: bool) -> Result<LedP
 }
 
 fn resolve_mode(s: &str, edge: bool) -> Result<u8> {
-    if let Some(m) = if edge {
-        EdgeMode::from_name(s).map(EdgeMode::code)
-    } else {
-        Mode::from_name(s).map(Mode::code)
-    } {
-        return Ok(m);
+    if edge {
+        // The edge light resolves names and codes by its own rule, from core,
+        // so the GUI's picker cannot disagree with this. Its off state is code
+        // 0, which the backlight's range rejects.
+        if let Some(code) = gamakay_core::light::edge_mode_code(s) {
+            return Ok(code);
+        }
+        if let Ok(n) = s.trim().parse::<u8>() {
+            bail!(
+                "unknown edge mode code {n} (this firmware implements 0..={})",
+                gamakay_core::light::MAX_MODE_CODE
+            );
+        }
+        bail!("unknown edge mode {s:?} (try: off, static, breathing, neon, wave, snake)")
+    }
+    if let Some(m) = Mode::from_name(s) {
+        return Ok(m.code());
     }
     if let Ok(n) = s.trim().parse::<u8>() {
         // A numeric code is only accepted when it names a mode the board
@@ -208,13 +223,9 @@ fn resolve_mode(s: &str, edge: bool) -> Result<u8> {
             return Ok(n);
         }
         bail!(
-            "unknown {} mode code {n} (this firmware implements 1..={})",
-            if edge { "edge" } else { "backlight" },
+            "unknown backlight mode code {n} (this firmware implements 1..={})",
             gamakay_core::light::MAX_MODE_CODE
         );
-    }
-    if edge {
-        bail!("unknown edge mode {s:?} (try: off, static, breathing, neon, wave, snake)")
     }
     bail!("unknown mode {s:?} (try: static, wave, spectrum, breathing, ripple, ...)")
 }
@@ -223,12 +234,10 @@ fn resolve_mode(s: &str, edge: bool) -> Result<u8> {
 /// same exchange (see `docs/protocol.md`).
 pub(crate) fn print_param(label: &str, p: &LedParam, edge: bool) {
     let name = if edge {
-        EdgeMode::from_code(p.mode).map(EdgeMode::name)
+        EdgeMode::name_for_code(p.mode)
     } else {
-        Mode::from_code(p.mode).map(Mode::name)
-    }
-    .map(str::to_string)
-    .unwrap_or_else(|| format!("mode-{}", p.mode));
+        Mode::name_for_code(p.mode)
+    };
     let kind = if p.rainbow { "rainbow" } else { "fixed" };
     println!(
         "{label}: {name:<10} speed {} brightness {} {kind} #{:02x}{:02x}{:02x} (sent)",
@@ -236,18 +245,24 @@ pub(crate) fn print_param(label: &str, p: &LedParam, edge: bool) {
     );
 }
 
-pub(crate) fn print_state(label: &str, s: &LedState) {
+/// Print a read-back state. `edge` picks the mode table: the two lights share
+/// wire codes but name them differently (3 is `spectrum` for the backlight and
+/// `neon` for the underglow), so naming an edge state from the backlight table
+/// would print a mode the same tool refuses to accept back.
+pub(crate) fn print_state(label: &str, s: &LedState, edge: bool) {
     let color = format!("#{:02x}{:02x}{:02x}", s.rgb[0], s.rgb[1], s.rgb[2]);
     let kind = match s.preset {
         Some(p) => format!("preset {p}"),
         None => format!("flags {}", s.flags),
     };
+    let name = if edge {
+        s.edge_mode_name()
+    } else {
+        s.mode_name()
+    };
     println!(
-        "{label}: {:<10} speed {} brightness {} {} {color}",
-        s.mode_name(),
-        s.speed,
-        s.brightness,
-        kind,
+        "{label}: {name:<10} speed {} brightness {} {} {color}",
+        s.speed, s.brightness, kind,
     );
 }
 

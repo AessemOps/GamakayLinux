@@ -26,6 +26,13 @@ pub enum Request {
     ReadLayer(bool),
     SetBacklight(LedParam),
     SetBacklightOff(bool),
+    /// Set the underglow (the board's edge light: bottom mesh + side LEDs).
+    SetEdge(LedParam),
+    /// Read the underglow. Sent when the Lighting tab is opened rather than on
+    /// connect, for the same reason the macro list is: the connect path has a
+    /// feature-transfer budget, and overrunning it stalls the board's control
+    /// endpoint until a replug.
+    ReadEdge,
     SetSlot {
         fn_layer: bool,
         slot: u8,
@@ -63,6 +70,8 @@ pub enum Event {
     Connected(Summary),
     Disconnected,
     Backlight(LedState),
+    /// The stored underglow parameter (`0x88`).
+    Edge(LedState),
     /// The decoded non-empty slots of a layer, plus the slots the firmware
     /// runs itself (which therefore cannot be repurposed).
     Layer {
@@ -145,6 +154,12 @@ impl Worker {
                         self.set_backlight_off(off);
                     }
                 }
+                Request::SetEdge(p) => {
+                    if self.writable() {
+                        self.set_edge(&p);
+                    }
+                }
+                Request::ReadEdge => self.read_edge(),
                 Request::SetSlot {
                     fn_layer,
                     slot,
@@ -173,12 +188,16 @@ impl Worker {
         }
     }
 
-    /// Open the board if needed, then read the summary and current state.
+    /// Open the board if needed, then read its current state.
+    ///
+    /// `ensure_device` announces the board it opens, so this must not announce
+    /// it again: the UI queues its on-demand reads on every `Connected`, and a
+    /// second one per connect would double the 200-transfer macro read — the
+    /// very burst the on-demand rule exists to keep out of the connect path.
     fn connect_and_read(&mut self) {
         if !self.ensure_device() {
             return;
         }
-        self.read_summary();
         self.read_backlight();
         self.read_layer(false);
         self.read_layer(true);
@@ -372,6 +391,24 @@ impl Worker {
                 "backlight {}",
                 if o.backlight_off { "off" } else { "on" }
             )));
+        }
+    }
+
+    /// Read the underglow. On demand, not on connect: the connect path has a
+    /// feature-transfer budget (see [`Request::ReadLayer`]).
+    fn read_edge(&mut self) {
+        if let Some(edge) = self.with_session(|s| s.edge_param()) {
+            self.emit(Event::Edge(edge));
+        }
+    }
+
+    fn set_edge(&mut self, p: &LedParam) {
+        if let Some(state) = self.with_session(|s| {
+            s.set_edge(p, LK67_FLAGS)?;
+            s.edge_param()
+        }) {
+            self.emit(Event::Edge(state));
+            self.emit(Event::Status("underglow applied".into()));
         }
     }
 

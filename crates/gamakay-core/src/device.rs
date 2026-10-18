@@ -48,8 +48,11 @@ pub struct DeviceRecord {
     pub support_onboard: u8,
     pub key_layout: &'static str,
     pub light_layout: &'static str,
-    /// Whether the board has an edge/side light. Presence comes from the
-    /// record, not from a GET reply (the firmware answers one anyway).
+    /// Whether the board has an edge/side light — the underglow: the bottom
+    /// mesh and the side LEDs, driven by `0x08`/`0x88`. This follows the
+    /// **hardware**, which is not what the vendor table's own field means: the
+    /// LK67's record says it has none because the vendor *software* offers no
+    /// control for it, while the board has one and the firmware drives it.
     pub side_light: bool,
     pub keys: u16,
     /// The keys the firmware drives on the **Fn layer**, which therefore
@@ -76,7 +79,11 @@ pub const LK67: DeviceRecord = DeviceRecord {
     support_onboard: 2,
     key_layout: "LK67",
     light_layout: "LK67",
-    side_light: false,
+    // Bottom mesh + side LEDs, reachable through the edge params. The vendor
+    // table says otherwise because its software exposes no control for them;
+    // the hardware has them and `SET 0x08` drives them. Measured on the test
+    // unit — see docs/protocol.md -> "Underglow (edge light)".
+    side_light: true,
     keys: 67,
     // Read off GAMAKAY's web driver with the Fn layer selected: the keys it
     // paints red. They are the firmware's Fn functions (QWER lighting/speed,

@@ -4,6 +4,25 @@ All notable changes to this project. Version numbers are the tags; the workspace
 `Cargo.toml` version is the source of truth and `scripts/check-release-version.sh`
 keeps the PKGBUILD in step with it.
 
+## Unreleased
+
+**The underglow works.** The LK67's side and bottom-mesh LEDs were treated as
+absent, because that is what GamaKay's software says: it exposes no control for
+them, and its record for this board reports no side light. The board disagrees —
+the LEDs are there, the firmware drives them through `SET 0x08`, and it answers
+`GET 0x88` with the stored parameter. The GUI gains an **Underglow** panel
+(mode, including off, and colour), `gamakay light edge` works without `--force`
+and answers to the name `underglow` too, and the record is corrected.
+
+Measured rather than assumed, with the key backlight pinned to a fixed colour so
+the two lights could be told apart: the underglow honours **mode and colour
+only**. Brightness (4, 1, 0 are identical), speed (the wave animates at one
+fixed rate) and the flags nibble (the "rainbow" flag stays a single steady
+colour over 45 s) are stored without changing anything visible, so the app
+offers none of them and a write preserves whatever the board holds.
+`tests/fixtures/lk67-edge-light.txt` pins four written states read back from the
+board; the vendor app never set any of them.
+
 ## 0.1.1 — 2026-10-18
 
 **Fixed: the app has its icon now.** Every package already installed the icons
