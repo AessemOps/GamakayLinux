@@ -198,12 +198,23 @@ pub(crate) fn merge(cur: &LedState, args: &LightArgs, edge: bool) -> Result<LedP
 }
 
 fn resolve_mode(s: &str, edge: bool) -> Result<u8> {
-    if let Some(m) = if edge {
-        EdgeMode::from_name(s).map(EdgeMode::code)
-    } else {
-        Mode::from_name(s).map(Mode::code)
-    } {
-        return Ok(m);
+    if edge {
+        // The edge light resolves names and codes by its own rule, from core,
+        // so the GUI's picker cannot disagree with this. Its off state is code
+        // 0, which the backlight's range rejects.
+        if let Some(code) = gamakay_core::light::edge_mode_code(s) {
+            return Ok(code);
+        }
+        if let Ok(n) = s.trim().parse::<u8>() {
+            bail!(
+                "unknown edge mode code {n} (this firmware implements 0..={})",
+                gamakay_core::light::MAX_MODE_CODE
+            );
+        }
+        bail!("unknown edge mode {s:?} (try: off, static, breathing, neon, wave, snake)")
+    }
+    if let Some(m) = Mode::from_name(s) {
+        return Ok(m.code());
     }
     if let Ok(n) = s.trim().parse::<u8>() {
         // A numeric code is only accepted when it names a mode the board
@@ -212,13 +223,9 @@ fn resolve_mode(s: &str, edge: bool) -> Result<u8> {
             return Ok(n);
         }
         bail!(
-            "unknown {} mode code {n} (this firmware implements 1..={})",
-            if edge { "edge" } else { "backlight" },
+            "unknown backlight mode code {n} (this firmware implements 1..={})",
             gamakay_core::light::MAX_MODE_CODE
         );
-    }
-    if edge {
-        bail!("unknown edge mode {s:?} (try: off, static, breathing, neon, wave, snake)")
     }
     bail!("unknown mode {s:?} (try: static, wave, spectrum, breathing, ripple, ...)")
 }
@@ -227,12 +234,10 @@ fn resolve_mode(s: &str, edge: bool) -> Result<u8> {
 /// same exchange (see `docs/protocol.md`).
 pub(crate) fn print_param(label: &str, p: &LedParam, edge: bool) {
     let name = if edge {
-        EdgeMode::from_code(p.mode).map(EdgeMode::name)
+        EdgeMode::name_for_code(p.mode)
     } else {
-        Mode::from_code(p.mode).map(Mode::name)
-    }
-    .map(str::to_string)
-    .unwrap_or_else(|| format!("mode-{}", p.mode));
+        Mode::name_for_code(p.mode)
+    };
     let kind = if p.rainbow { "rainbow" } else { "fixed" };
     println!(
         "{label}: {name:<10} speed {} brightness {} {kind} #{:02x}{:02x}{:02x} (sent)",

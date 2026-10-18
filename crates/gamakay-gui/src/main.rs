@@ -380,20 +380,21 @@ impl App {
                 self.profile = s.profile;
                 self.status = format!("connected: {} ({})", s.model, s.usb);
                 self.summary = Some(s);
+                // Whatever the on-demand tabs hold belongs to the board that was
+                // attached: a Reconnect re-opens the device without ever
+                // emitting `Disconnected`, so it has to be dropped here too or
+                // the panel would describe the previous board and its stored
+                // fields would be what the next Apply writes.
+                self.forget_on_demand();
                 // A board that appears while an on-demand tab is already open
                 // still needs its data read: the tab-change handler has already
                 // run, and a tab named on the command line never runs it at all.
                 self.read_open_tab();
             }
             Event::Disconnected => {
-                // The macro list belongs to the board that just went away, and
-                // so does the underglow: showing either after an unplug would
-                // describe a board that is no longer attached.
-                self.macros_loaded = false;
-                self.macros.clear();
-                self.edge_loaded = false;
-                self.edge_store = None;
-                self.rebuild_slot_choices();
+                // Showing either one after an unplug would describe a board that
+                // is no longer attached.
+                self.forget_on_demand();
                 self.connected = false;
                 self.summary = None;
                 self.status = "no keyboard found".into();
@@ -476,16 +477,11 @@ impl App {
         self.edge_loaded = true;
     }
 
-    /// The edge mode the picker names, accepting a wire number the way the
-    /// backlight's mode field does.
+    /// The edge mode the picker names, accepting a wire number. The rule is
+    /// core's, so this panel and `light edge` resolve a name or a number the
+    /// same way — including the underglow's off state, which is code 0.
     fn edge_mode_code(&self) -> Option<u8> {
-        if let Some(code) = EdgeMode::from_name(&self.edge_mode).map(EdgeMode::code) {
-            return Some(code);
-        }
-        match self.edge_mode.trim().parse::<u8>() {
-            Ok(n) if light::is_mode_code(n) => Some(n),
-            _ => None,
-        }
+        light::edge_mode_code(&self.edge_mode)
     }
 
     fn apply_edge(&mut self) {
@@ -509,6 +505,16 @@ impl App {
         self.send(Request::SetEdge(LedParam::with_mode_and_colour(
             &store, mode, rgb,
         )));
+    }
+
+    /// Forget what the on-demand tabs hold. Both belong to the board they were
+    /// read from, which is not necessarily the board attached now.
+    fn forget_on_demand(&mut self) {
+        self.macros_loaded = false;
+        self.macros.clear();
+        self.edge_loaded = false;
+        self.edge_store = None;
+        self.rebuild_slot_choices();
     }
 
     /// Read what the open tab shows but the connect path does not fetch: the

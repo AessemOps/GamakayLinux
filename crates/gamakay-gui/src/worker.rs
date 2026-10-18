@@ -188,12 +188,16 @@ impl Worker {
         }
     }
 
-    /// Open the board if needed, then read the summary and current state.
+    /// Open the board if needed, then read its current state.
+    ///
+    /// `ensure_device` announces the board it opens, so this must not announce
+    /// it again: the UI queues its on-demand reads on every `Connected`, and a
+    /// second one per connect would double the 200-transfer macro read — the
+    /// very burst the on-demand rule exists to keep out of the connect path.
     fn connect_and_read(&mut self) {
         if !self.ensure_device() {
             return;
         }
-        self.read_summary();
         self.read_backlight();
         self.read_layer(false);
         self.read_layer(true);
