@@ -32,7 +32,7 @@ _archive="GamakayLinux-$pkgver"
 # immediately after tagging, then commit the value. The release workflow's guard
 # job fails if a published version's hash does not match its archive, and warns
 # while it is still SKIP.
-sha256sums=('SKIP')
+sha256sums=('f110126e3865689cc361ccc3312e1a0598c61f2b4b095cd56c7dd458495fafc6')
 
 prepare() {
   cd "$_archive"
