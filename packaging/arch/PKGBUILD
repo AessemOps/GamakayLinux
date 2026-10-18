@@ -6,7 +6,7 @@
 # scripts/check-release-version.sh; `make package-arch` builds it.
 
 pkgname=gamakaylinux
-pkgver=0.1.1
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Configure the GamaKay LK67 keyboard from Linux over USB"
 # x86_64 only: nothing builds or verifies aarch64, and claiming it would ship a
@@ -32,7 +32,7 @@ _archive="GamakayLinux-$pkgver"
 # immediately after tagging, then commit the value. The release workflow's guard
 # job fails if a published version's hash does not match its archive, and warns
 # while it is still SKIP.
-sha256sums=('89ebc35adbb099f88727ee6bbfe6d1d706aad6a35ae750eb4bbaf8e81cfa920b')
+sha256sums=('SKIP')
 
 prepare() {
   cd "$_archive"

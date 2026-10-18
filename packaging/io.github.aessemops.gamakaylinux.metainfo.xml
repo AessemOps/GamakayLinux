@@ -39,6 +39,13 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.0" date="2026-10-18">
+      <description>
+        <p>The board's underglow works: its side and bottom-mesh LEDs get their
+           own panel, with modes and a colour wheel of their own. GamaKay's
+           software leaves these LEDs alone.</p>
+      </description>
+    </release>
     <release version="0.1.1" date="2026-10-18">
       <description>
         <p>The window now announces its application id, so a desktop shell

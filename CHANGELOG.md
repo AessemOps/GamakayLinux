@@ -4,7 +4,7 @@ All notable changes to this project. Version numbers are the tags; the workspace
 `Cargo.toml` version is the source of truth and `scripts/check-release-version.sh`
 keeps the PKGBUILD in step with it.
 
-## Unreleased
+## 0.2.0 — 2026-10-18
 
 **The underglow works.** The LK67's side and bottom-mesh LEDs were treated as
 absent, because that is what GamaKay's software says: it exposes no control for
@@ -22,6 +22,19 @@ colour over 45 s) are stored without changing anything visible, so the app
 offers none of them and a write preserves whatever the board holds.
 `tests/fixtures/lk67-edge-light.txt` pins four written states read back from the
 board; the vendor app never set any of them.
+
+The panel's colour has a wheel of its own — smaller than the backlight's, and
+starting from the colour the board holds — and a drag only sets the field:
+**Apply** sends it, because the board commits every write to flash and a live
+drag would queue writes inside the commit window.
+
+Also fixed, from reviewing the branch: a connected board was announced twice, so
+a tab that reads on demand ran its read twice — and the macro list is 200 feature
+transfers, the burst the on-demand rule exists to keep out of the connect path; a
+Reconnect kept the previous board's underglow, whose stored fields the next Apply
+would have written to a different board; `light edge get` printed `spectrum`, the
+backlight's name, for a mode `--mode neon` sets; and the underglow's off state is
+accepted as `--mode 0`, as the protocol documents, not only as `off`.
 
 ## 0.1.1 — 2026-10-18
 
