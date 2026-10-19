@@ -167,6 +167,11 @@ fn toggle_backlight(cli: &Cli, off: bool) -> Result<()> {
 
 /// Merge the requested fields over the current state; unspecified fields keep
 /// their current value.
+///
+/// A colour is a request for *that colour*, so it clears the rainbow flag even
+/// when `--fixed` is not given: with the flag left set the board shows its own
+/// rainbow palette and ignores the colour. `--rainbow` sets it explicitly, and
+/// with neither flag nor colour the stored value is preserved.
 pub(crate) fn merge(cur: &LedState, args: &LightArgs, edge: bool) -> Result<LedParam> {
     let mode = match &args.mode {
         Some(m) => resolve_mode(m, edge)?,
@@ -188,7 +193,7 @@ pub(crate) fn merge(cur: &LedState, args: &LightArgs, edge: bool) -> Result<LedP
         option: args.direction.unwrap_or(cur.option),
         rainbow: if args.rainbow {
             true
-        } else if args.fixed {
+        } else if args.fixed || args.color.is_some() {
             false
         } else {
             cur.flags == LK67_FLAGS.rainbow
@@ -283,5 +288,57 @@ mod tests {
         // Six *bytes* of non-ASCII must be an error, not a char-boundary panic.
         assert!(parse_color("€€").is_err());
         assert!(parse_color("ééé").is_err());
+    }
+
+    fn rainbow_state() -> LedState {
+        LedState {
+            mode: 1,
+            speed: 3,
+            brightness: 4,
+            option: 0,
+            flags: LK67_FLAGS.rainbow,
+            rgb: [0x12, 0x34, 0x56],
+            preset: None,
+        }
+    }
+
+    /// The board ignores RGB while the rainbow bit is set, so writing a colour
+    /// has to clear it — otherwise `--color red` shows a rainbow.
+    #[test]
+    fn a_colour_clears_the_rainbow_flag() {
+        let cur = rainbow_state();
+        let args = LightArgs {
+            color: Some([0xff, 0x00, 0x00]),
+            ..Default::default()
+        };
+        let p = merge(&cur, &args, true).unwrap();
+        assert_eq!(p.rgb, [0xff, 0x00, 0x00]);
+        assert!(!p.rainbow, "the colour must be the one the board shows");
+        assert_eq!(p.speed, 3, "fields not offered are preserved");
+
+        let untouched = merge(&cur, &LightArgs::default(), true).unwrap();
+        assert!(untouched.rainbow, "untouched flags are preserved");
+
+        let forced = merge(
+            &cur,
+            &LightArgs {
+                rainbow: true,
+                ..Default::default()
+            },
+            true,
+        )
+        .unwrap();
+        assert!(forced.rainbow);
+
+        let fixed = merge(
+            &cur,
+            &LightArgs {
+                fixed: true,
+                ..Default::default()
+            },
+            true,
+        )
+        .unwrap();
+        assert!(!fixed.rainbow);
     }
 }

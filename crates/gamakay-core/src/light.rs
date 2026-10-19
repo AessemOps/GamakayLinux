@@ -221,19 +221,25 @@ pub struct LedParam {
 }
 
 impl LedParam {
-    /// A parameter that keeps every field of `from` except the mode and the
-    /// colour, which is what an underglow write must do: the LK67 stores
-    /// brightness, speed, direction and the flags nibble for the edge light but
+    /// A parameter that keeps every field of `from` except the mode, the colour
+    /// and the rainbow flag, which is what an underglow colour write must do:
+    /// the LK67 stores brightness, speed and direction for the edge light but
     /// answers to mode and colour alone, so a front-end that offers only those
     /// two would otherwise overwrite settings it never showed — and cleared, or
     /// silently reset to a default, they would be gone from the board.
+    ///
+    /// The flags nibble is the exception. With the rainbow bit set the board
+    /// shows its own rainbow palette and ignores RGB on every mode (a static
+    /// write shows a static gradient, not the chosen colour), so preserving it
+    /// would make the colour silently do nothing. A front-end with a separate
+    /// rainbow control sets that flag explicitly instead.
     pub fn with_mode_and_colour(from: &LedState, mode: u8, rgb: [u8; 3]) -> Self {
         Self {
             mode,
             speed: from.speed,
             brightness: from.brightness,
             option: from.option,
-            rainbow: from.flags == LK67_FLAGS.rainbow,
+            rainbow: false,
             rgb,
         }
     }
@@ -506,18 +512,20 @@ mod tests {
         ));
     }
 
-    /// Only the mode and the colour may change. The fields a front-end cannot
-    /// offer — the underglow has no working brightness or speed — have to
-    /// survive the write, because the board stores them even while it ignores
-    /// them, and a write that reset them would lose them silently.
+    /// Only the mode, the colour and the rainbow flag may change. The fields a
+    /// front-end cannot offer — the underglow has no working brightness or speed
+    /// — have to survive the write, because the board stores them even while it
+    /// ignores them, and a write that reset them would lose them silently. The
+    /// rainbow flag does not survive: with it set the board ignores the colour,
+    /// so a colour write must clear it.
     #[test]
-    fn an_underglow_write_keeps_the_fields_it_does_not_offer() {
+    fn an_underglow_write_keeps_what_it_does_not_offer_and_clears_rainbow() {
         let stored = LedState {
             mode: 1,
             speed: 3,
             brightness: 4,
             option: 2,
-            flags: LK67_FLAGS.fixed,
+            flags: LK67_FLAGS.rainbow,
             rgb: [0x12, 0x34, 0x56],
             preset: None,
         };
@@ -530,7 +538,17 @@ mod tests {
         );
         assert_eq!(p.brightness, 4);
         assert_eq!(p.option, 2);
-        assert!(!p.rainbow, "the flags nibble is preserved too");
+        assert!(
+            !p.rainbow,
+            "a colour write must clear the rainbow bit, or the board ignores the colour"
+        );
+
+        // A fixed nibble stays fixed: clearing is idempotent.
+        let fixed = LedState {
+            flags: LK67_FLAGS.fixed,
+            ..stored
+        };
+        assert!(!LedParam::with_mode_and_colour(&fixed, 1, [0xff, 0, 0]).rainbow);
     }
 
     /// A code this build does not model still names itself: the board can hold

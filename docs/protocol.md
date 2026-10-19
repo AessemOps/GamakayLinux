@@ -288,11 +288,14 @@ auto-exposure):
 | mode 5 | moving segment(s) |
 | speed 0 vs 4 | **no difference**: the wave animates at one fixed rate |
 | brightness 4 / 1 / 0 | **no difference**: identical lit-pixel counts and colour |
-| the flags nibble (`7`/`8`) | **no visible difference**: the "rainbow" flag stays one steady colour over 45 s |
+| the flags nibble (`7`/`8`) | **`8` overrides the colour**: the firmware's rainbow palette on every mode, static included (a static gradient, not the chosen colour); `7` shows RGB |
 
-So the underglow answers to **mode and colour only**. The rest of the parameter
-is stored: it survives a write, so a write must preserve it (read-modify-write)
-rather than invent it. Mode 0 is the off switch, and it does not touch the keys.
+So the underglow answers to **mode, colour and the rainbow bit**. Brightness and
+speed are stored: they survive a write, so a write must preserve them
+(read-modify-write) rather than invent them. The flags nibble is not cosmetic —
+bit 3 selects the rainbow palette over RGB, so a write that sets a colour sends
+`7` (fixed) and only an explicit rainbow request sends `8`. Mode 0 is the off
+switch, and it does not touch the keys.
 
 `GET 0x88` returns the stored parameter on this firmware (mode, speed,
 brightness, flags, RGB); the pre-update board answered it with zeros, which is

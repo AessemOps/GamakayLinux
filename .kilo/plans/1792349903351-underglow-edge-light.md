@@ -40,6 +40,14 @@ a fixed reference region to rule out camera auto-exposure).
 - **The rainbow flag has no visible effect**: 15 frames over 45 s with the flag
   set stay at mean 17/87/100, spread 2.5.
 
+> **Correction, 2026-10-19.** That last bullet is wrong. With the rainbow bit
+> set (`flags 8`) the board shows its own rainbow palette and ignores RGB in
+> every mode — static included, where it shows a static gradient rather than the
+> colour that was written. The probe behind the bullet observed a cycling colour
+> (mode 3), which ignores RGB regardless, so it could not see the difference. A
+> colour write must therefore clear the bit: see `LedParam::with_mode_and_colour`
+> and the CLI's `merge`, and the corrected table in `docs/protocol.md`.
+
 So on this board the underglow honours **mode and colour only**. Everything
 else is stored and must survive a write (read-modify-write) but has nothing to
 control.
