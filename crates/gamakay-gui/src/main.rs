@@ -110,15 +110,18 @@ struct App {
     speed: u8,
     direction: u8,
     rainbow: bool,
-    // Underglow (the board's edge light: bottom mesh + side LEDs). Only mode
-    // and colour are offered, because on this board brightness, speed and the
-    // flags nibble are stored without changing anything visible. The write
-    // therefore preserves the fields it read instead of inventing values, which
-    // is why the last read is kept.
+    // Underglow (the board's edge light: bottom mesh + side LEDs). Mode, colour
+    // and the rainbow toggle are offered: those are what the board answers to.
+    // Brightness and speed are stored without changing anything visible, so the
+    // write preserves the fields it read instead of inventing values, which is
+    // why the last read is kept.
     /// The stored underglow parameter, once read.
     edge_store: Option<LedState>,
     edge_mode: String,
     edge_color: String,
+    /// The board ignores RGB while this is set and shows its own rainbow
+    /// palette, on every mode — hence a toggle rather than a hidden flag.
+    edge_rainbow: bool,
     /// Whether the underglow has been read this session. Read when the Lighting
     /// tab is opened, not on connect: the connect path has a feature-transfer
     /// budget (see `Request::ReadLayer`).
@@ -188,6 +191,7 @@ enum Message {
     /// Underglow (edge light) edits.
     EdgeMode(String),
     EdgeColor(String),
+    EdgeRainbow(bool),
     ApplyEdge,
     /// Edit the Fn layer rather than the base keymap.
     FnLayer(bool),
@@ -255,6 +259,7 @@ impl App {
             edge_store: None,
             edge_mode: EdgeMode::Static.name().into(),
             edge_color: "#ff0000".into(),
+            edge_rainbow: false,
             edge_loaded: false,
             phase: 0.0,
             fn_layer: false,
@@ -303,6 +308,7 @@ impl App {
             Message::LightOff => self.send(Request::SetBacklightOff(true)),
             Message::EdgeMode(m) => self.edge_mode = m,
             Message::EdgeColor(c) => self.edge_color = c,
+            Message::EdgeRainbow(v) => self.edge_rainbow = v,
             Message::ApplyEdge => self.apply_edge(),
             Message::FnLayer(fn_layer) => {
                 self.fn_layer = fn_layer;
@@ -478,6 +484,7 @@ impl App {
             .map(|m| m.name().to_string())
             .unwrap_or_else(|| s.mode.to_string());
         self.edge_color = format!("#{:02x}{:02x}{:02x}", s.rgb[0], s.rgb[1], s.rgb[2]);
+        self.edge_rainbow = s.flags == LK67_FLAGS.rainbow;
         self.edge_store = Some(*s);
         self.edge_loaded = true;
     }
@@ -491,8 +498,8 @@ impl App {
 
     fn apply_edge(&mut self) {
         // The underglow write carries the whole parameter, so the fields this
-        // panel does not offer (brightness, speed, direction, flags) come from
-        // the board's own last read rather than from a default: inventing them
+        // panel does not offer (brightness, speed, direction) come from the
+        // board's own last read rather than from a default: inventing them
         // would change settings the user never touched. Without that read there
         // is nothing to preserve, so refuse instead.
         let Some(store) = self.edge_store else {
@@ -508,7 +515,10 @@ impl App {
             return;
         };
         self.send(Request::SetEdge(LedParam::with_mode_and_colour(
-            &store, mode, rgb,
+            &store,
+            mode,
+            rgb,
+            self.edge_rainbow,
         )));
     }
 
@@ -519,6 +529,7 @@ impl App {
         self.macros.clear();
         self.edge_loaded = false;
         self.edge_store = None;
+        self.edge_rainbow = false;
         self.rebuild_slot_choices();
     }
 
@@ -898,8 +909,8 @@ impl App {
             .spacing(16)
             .width(Length::Fill);
 
-        // Only what the board honours is offered: mode and colour. Brightness,
-        // speed and the rainbow flag are stored for the underglow but change
+        // Only what the board honours is offered: mode, colour and the rainbow
+        // toggle. Brightness and speed are stored for the underglow but change
         // nothing visible on it, so the write keeps whatever the board has
         // rather than pretending they do something (see docs/protocol.md ->
         // "Underglow (edge light)").
@@ -951,6 +962,12 @@ impl App {
                             .align_y(iced::Alignment::Center)
                             .into()
                         ),
+                        field_row(
+                            "Rainbow",
+                            toggler(self.edge_rainbow)
+                                .on_toggle(Message::EdgeRainbow)
+                                .into()
+                        ),
                     ]
                     .spacing(10),
                     Element::from(button(text("Apply")).on_press(Message::ApplyEdge)),
@@ -958,8 +975,8 @@ impl App {
                 .spacing(18)
                 .align_y(iced::Alignment::Center),
                 text(
-                    "The board's underglow has no brightness or speed: mode and colour \
-                     are the only controls it answers to."
+                    "The board's underglow has no brightness or speed. With rainbow on it \
+                     uses its own palette and ignores the colour."
                 )
                 .size(11),
             ]

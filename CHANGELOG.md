@@ -6,6 +6,13 @@ keeps the PKGBUILD in step with it.
 
 ## Unreleased
 
+### Added
+
+- **The Underglow panel gains a Rainbow toggle.** The flags nibble is not
+  cosmetic: with the rainbow bit set the board shows its own palette and ignores
+  the colour, so it is now a visible control with the colour wheel instead of a
+  hidden flag. Turning it off applies the chosen colour.
+
 ### Fixed
 
 - **The underglow colour now applies in static mode.** The board ignores RGB

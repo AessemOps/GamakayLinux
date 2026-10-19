@@ -59,10 +59,13 @@ control.
 - CLI: the existing `light edge` path becomes usable without `--force`; add a
   visible `underglow` alias, since that is what the hardware page calls it.
 - GUI: an **Underglow** section in the Lighting tab — mode picker (including
-  Off) and colour — read on demand when the tab opens (the connect path already
-  spends its feature-transfer budget; see the `ReadLayer` note), written with
-  the same fire-and-forget flow as the backlight. Brightness/speed/rainbow are
-  deliberately **not** offered: the measurements above show they do nothing.
+  Off), colour and a **Rainbow** toggle — read on demand when the tab opens (the
+  connect path already spends its feature-transfer budget; see the `ReadLayer`
+  note), written with the same fire-and-forget flow as the backlight. Brightness
+  and speed are deliberately **not** offered: the measurements above show they do
+  nothing. (The rainbow bit is offered even though the first probe read it as
+  inert; see the correction below — it overrides the colour, so leaving it out
+  made the colour unusable.)
 - Docs: `docs/protocol.md` gets the corrected finding and the measured
   semantics; README/AGENTS/CHANGELOG follow.
 - Fixture: `tests/fixtures/lk67-edge-light.txt` + a decoder test.
