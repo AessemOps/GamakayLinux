@@ -4,7 +4,7 @@ All notable changes to this project. Version numbers are the tags; the workspace
 `Cargo.toml` version is the source of truth and `scripts/check-release-version.sh`
 keeps the PKGBUILD in step with it.
 
-## Unreleased
+## 0.2.1 — 2026-10-20
 
 ### Added
 

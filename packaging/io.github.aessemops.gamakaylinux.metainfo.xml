@@ -39,6 +39,14 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.2.1" date="2026-10-20">
+      <description>
+        <p>The underglow's colour now applies: with the rainbow bit stored the
+           board shows its own palette and ignores the colour, so a colour write
+           clears it. The Underglow panel gains a Rainbow toggle to ask for the
+           palette explicitly.</p>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-10-18">
       <description>
         <p>The board's underglow works: its side and bottom-mesh LEDs get their
