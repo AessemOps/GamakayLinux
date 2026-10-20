@@ -39,6 +39,14 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.3.0" date="2026-10-20">
+      <description>
+        <p>Renamed to lk67ctl. The tool covers one board, the GamaKay LK67, and
+           the new name keeps the vendor's trademark out of the product name.
+           Packages replace gamakaylinux, and existing profiles keep working
+           from the old configuration directory.</p>
+      </description>
+    </release>
     <release version="0.2.1" date="2026-10-20">
       <description>
         <p>The underglow's colour now applies: with the rainbow bit stored the
