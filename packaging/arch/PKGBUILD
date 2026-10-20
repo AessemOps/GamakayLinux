@@ -36,7 +36,7 @@ _archive="lk67ctl-$pkgver"
 # immediately after tagging, then commit the value. The release workflow's guard
 # job fails if a published version's hash does not match its archive, and warns
 # while it is still SKIP.
-sha256sums=('f910ebc54c0f0c6d95cae2e012026a381ea98e849ca2fce6edce1e3c27a414aa')
+sha256sums=('d348d3246b10304c32632db7af0424c6a21cb00de66bc32501f18632cf7f1122')
 
 prepare() {
   cd "$_archive"
