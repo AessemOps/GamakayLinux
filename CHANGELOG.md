@@ -4,6 +4,24 @@ All notable changes to this project. Version numbers are the tags; the workspace
 `Cargo.toml` version is the source of truth and `scripts/check-release-version.sh`
 keeps the PKGBUILD in step with it.
 
+## Unreleased
+
+### Added
+
+- **The Underglow panel gains a Rainbow toggle.** The flags nibble is not
+  cosmetic: with the rainbow bit set the board shows its own palette and ignores
+  the colour, so it is now a visible control with the colour wheel instead of a
+  hidden flag. Turning it off applies the chosen colour.
+
+### Fixed
+
+- **The underglow colour now applies in static mode.** The board ignores RGB
+  while the rainbow bit is set, and both the panel and `light edge set --color`
+  preserved that bit from the last read, so a colour write showed the firmware's
+  rainbow gradient instead of the chosen colour. Writing a colour now clears the
+  bit; `--rainbow` still sets it explicitly, and a write that touches neither
+  keeps the stored flags.
+
 ## 0.2.0 — 2026-10-18
 
 **The underglow works.** The LK67's side and bottom-mesh LEDs were treated as

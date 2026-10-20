@@ -221,19 +221,25 @@ pub struct LedParam {
 }
 
 impl LedParam {
-    /// A parameter that keeps every field of `from` except the mode and the
-    /// colour, which is what an underglow write must do: the LK67 stores
-    /// brightness, speed, direction and the flags nibble for the edge light but
-    /// answers to mode and colour alone, so a front-end that offers only those
-    /// two would otherwise overwrite settings it never showed — and cleared, or
-    /// silently reset to a default, they would be gone from the board.
-    pub fn with_mode_and_colour(from: &LedState, mode: u8, rgb: [u8; 3]) -> Self {
+    /// A parameter that keeps every field of `from` except the mode, the colour
+    /// and the rainbow flag: the LK67 stores brightness, speed and direction for
+    /// the edge light but answers to mode, colour and the rainbow bit alone, so
+    /// a front-end that offers only those would otherwise overwrite settings it
+    /// never showed — and cleared, or silently reset to a default, they would be
+    /// gone from the board.
+    ///
+    /// `rainbow` comes from the caller's own control. A front-end that offers a
+    /// colour but no rainbow toggle passes `false`: with the rainbow bit set the
+    /// board shows its own palette and ignores RGB on every mode (a static write
+    /// shows a static gradient, not the chosen colour), and preserving it would
+    /// make the colour silently do nothing.
+    pub fn with_mode_and_colour(from: &LedState, mode: u8, rgb: [u8; 3], rainbow: bool) -> Self {
         Self {
             mode,
             speed: from.speed,
             brightness: from.brightness,
             option: from.option,
-            rainbow: from.flags == LK67_FLAGS.rainbow,
+            rainbow,
             rgb,
         }
     }
@@ -506,22 +512,24 @@ mod tests {
         ));
     }
 
-    /// Only the mode and the colour may change. The fields a front-end cannot
-    /// offer — the underglow has no working brightness or speed — have to
-    /// survive the write, because the board stores them even while it ignores
-    /// them, and a write that reset them would lose them silently.
+    /// Only the mode, the colour and the rainbow flag may change. The fields a
+    /// front-end cannot offer — the underglow has no working brightness or speed
+    /// — have to survive the write, because the board stores them even while it
+    /// ignores them, and a write that reset them would lose them silently.
     #[test]
-    fn an_underglow_write_keeps_the_fields_it_does_not_offer() {
+    fn an_underglow_write_keeps_what_it_does_not_offer() {
         let stored = LedState {
             mode: 1,
             speed: 3,
             brightness: 4,
             option: 2,
-            flags: LK67_FLAGS.fixed,
+            flags: LK67_FLAGS.rainbow,
             rgb: [0x12, 0x34, 0x56],
             preset: None,
         };
-        let p = LedParam::with_mode_and_colour(&stored, 4, [0x00, 0xff, 0xff]);
+
+        // No rainbow control in this front-end: a colour must be the colour.
+        let p = LedParam::with_mode_and_colour(&stored, 4, [0x00, 0xff, 0xff], false);
         assert_eq!(p.mode, 4);
         assert_eq!(p.rgb, [0x00, 0xff, 0xff]);
         assert_eq!(
@@ -530,7 +538,14 @@ mod tests {
         );
         assert_eq!(p.brightness, 4);
         assert_eq!(p.option, 2);
-        assert!(!p.rainbow, "the flags nibble is preserved too");
+        assert!(
+            !p.rainbow,
+            "a colour without a rainbow control clears the bit"
+        );
+
+        // A front-end with a rainbow toggle passes its state through.
+        let q = LedParam::with_mode_and_colour(&stored, 4, [0x00, 0xff, 0xff], true);
+        assert!(q.rainbow, "the toggle's state is what the board is told");
     }
 
     /// A code this build does not model still names itself: the board can hold
