@@ -49,7 +49,7 @@ fi
 
 # The AppStream metadata advertises a version to software centres, and it is a
 # hand-written literal like the others.
-metainfo="packaging/io.github.aessemops.gamakaylinux.metainfo.xml"
+metainfo="packaging/io.github.aessemops.lk67ctl.metainfo.xml"
 if [ -f "$metainfo" ]; then
     metainfo_version="$(sed -n 's/.*<release version="\([^"]*\)".*/\1/p' "$metainfo" | head -1)"
     echo "packaging/${metainfo#packaging/} : ${metainfo_version:-<none>}"

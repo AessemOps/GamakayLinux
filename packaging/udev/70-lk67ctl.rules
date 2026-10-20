@@ -1,0 +1,18 @@
+# GamaKay LK67 — grant the active local user access to the settings hidraw
+# node without root, via systemd-logind's uaccess ACL.
+#
+# Install to /etc/udev/rules.d/70-lk67ctl.rules and run:
+#   sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
+# then replug the keyboard. `lk67ctl info` runs as your normal user.
+
+# Wired USB. The LK67 enumerates two interfaces; this matches the settings one
+# (usage page 1 / usage 6, the 64-byte vendor feature report). 3151:4003 is the
+# current firmware; 0461:4002 is the pre-2026-10 id.
+# The settings collection is interface 0; matching it keeps the grant to the
+# node the tool talks to rather than every hidraw interface of the board.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3151", ATTRS{idProduct}=="4003", ATTRS{bInterfaceNumber}=="00", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0461", ATTRS{idProduct}=="4002", ATTRS{bInterfaceNumber}=="00", TAG+="uaccess"
+
+# 2.4 GHz and Bluetooth are out of scope: the receiver declares no HID feature
+# report, so the protocol cannot be addressed over it, and Bluetooth was never
+# captured. No rule is needed for either. See docs/protocol.md.

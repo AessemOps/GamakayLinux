@@ -1081,40 +1081,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gamakay-cli"
-version = "0.2.1"
-dependencies = [
- "anyhow",
- "clap",
- "gamakay-core",
- "gamakay-hidraw",
- "serde",
- "toml",
-]
-
-[[package]]
-name = "gamakay-core"
-version = "0.2.1"
-
-[[package]]
-name = "gamakay-gui"
-version = "0.2.1"
-dependencies = [
- "gamakay-core",
- "gamakay-hidraw",
- "iced",
- "ttf-parser",
-]
-
-[[package]]
-name = "gamakay-hidraw"
-version = "0.2.1"
-dependencies = [
- "gamakay-core",
- "libc",
-]
-
-[[package]]
 name = "gethostname"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1694,6 +1660,40 @@ name = "litrs"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4744e383959f0db86ede514b809b1c53251889093803c05267acc7d4e7030d70"
+
+[[package]]
+name = "lk67-cli"
+version = "0.2.1"
+dependencies = [
+ "anyhow",
+ "clap",
+ "lk67-core",
+ "lk67-hidraw",
+ "serde",
+ "toml",
+]
+
+[[package]]
+name = "lk67-core"
+version = "0.2.1"
+
+[[package]]
+name = "lk67-gui"
+version = "0.2.1"
+dependencies = [
+ "iced",
+ "lk67-core",
+ "lk67-hidraw",
+ "ttf-parser",
+]
+
+[[package]]
+name = "lk67-hidraw"
+version = "0.2.1"
+dependencies = [
+ "libc",
+ "lk67-core",
+]
 
 [[package]]
 name = "lock_api"

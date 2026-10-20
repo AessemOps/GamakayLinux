@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/gamakay-core",
-    "crates/gamakay-hidraw",
-    "crates/gamakay-cli",
-    "crates/gamakay-gui",
+    "crates/lk67-core",
+    "crates/lk67-hidraw",
+    "crates/lk67-cli",
+    "crates/lk67-gui",
 ]
 
 [workspace.package]
@@ -15,12 +15,12 @@ edition = "2024"
 # 1.90 is a CI job, so this cannot drift.
 rust-version = "1.90"
 license = "GPL-3.0-or-later"
-repository = "https://github.com/AessemOps/GamakayLinux"
-authors = ["GamakayLinux contributors"]
+repository = "https://github.com/AessemOps/lk67ctl"
+authors = ["lk67ctl contributors"]
 
 [workspace.dependencies]
-gamakay-core = { path = "crates/gamakay-core" }
-gamakay-hidraw = { path = "crates/gamakay-hidraw" }
+lk67-core = { path = "crates/lk67-core" }
+lk67-hidraw = { path = "crates/lk67-hidraw" }
 
 # Small runtime footprint: nothing is pulled in that is not used.
 clap = { version = "4.5", features = ["derive"] }

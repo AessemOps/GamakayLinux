@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata: what software centres show for the app, and what
+     appimagetool looks for when packaging. The file name must match the
+     component id, or appstreamcli rejects it. -->
+<component type="desktop-application">
+  <id>io.github.aessemops.lk67ctl</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>lk67ctl</name>
+  <summary>Configure the GamaKay LK67 keyboard</summary>
+  <description>
+    <p>
+      An unofficial, native replacement for GamaKay's Windows app: lighting, keymaps and
+      macros for the LK67, written straight to the keyboard's onboard memory
+      over USB.
+    </p>
+    <p>
+      Nothing stays resident — every command writes to the keyboard and exits —
+      and the keyboard keeps typing while it is configured, because the kernel's
+      HID driver stays bound.
+    </p>
+    <ul>
+      <li>Lighting modes, brightness, speed and colour, with a live preview</li>
+      <li>Remap keys on the base and Fn layers, across the board's 8 profiles</li>
+      <li>A macro recorder, and a scriptable command line tool</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">lk67ctl.desktop</launchable>
+  <url type="homepage">https://github.com/AessemOps/lk67ctl</url>
+  <url type="bugtracker">https://github.com/AessemOps/lk67ctl/issues</url>
+  <developer id="io.github.aessemops">
+    <name>lk67ctl contributors</name>
+  </developer>
+  <!-- A screenshot can be added once the image is on the default branch, since
+       the tooling validates that its URL resolves. -->
+  <categories>
+    <category>Settings</category>
+    <category>HardwareSettings</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.2.1" date="2026-10-20">
+      <description>
+        <p>The underglow's colour now applies: with the rainbow bit stored the
+           board shows its own palette and ignores the colour, so a colour write
+           clears it. The Underglow panel gains a Rainbow toggle to ask for the
+           palette explicitly.</p>
+      </description>
+    </release>
+    <release version="0.2.0" date="2026-10-18">
+      <description>
+        <p>The board's underglow works: its side and bottom-mesh LEDs get their
+           own panel, with modes and a colour wheel of their own. GamaKay's
+           software leaves these LEDs alone.</p>
+      </description>
+    </release>
+    <release version="0.1.1" date="2026-10-18">
+      <description>
+        <p>The window now announces its application id, so a desktop shell
+           associates the running app with its launcher entry and shows its
+           icon instead of a generic one.</p>
+      </description>
+    </release>
+    <release version="0.1.0" date="2026-10-17">
+      <description>
+        <p>First release: lighting, keymaps, macros, the GUI and CLI, and packages
+           for Arch, Debian/Ubuntu, Fedora/RHEL and AppImage.</p>
+      </description>
+    </release>
+  </releases>
+</component>

@@ -8,7 +8,7 @@ stays outside the repo; it is only read to confirm a wire fact. **sharkfin is
 no longer a reference: it does not support the LK67.**
 
 This file is the source of truth for the command allow-list in
-`gamakay-core::guard`. A command that is not here is not sendable.
+`lk67-core::guard`. A command that is not here is not sendable.
 
 ## Transport
 
@@ -34,11 +34,11 @@ while we configure it.
 | `hidraw1` | 1.1 | consumer/system/keyboard report ids, a 3-byte vendor input on `0xFFFF:0x0001`, **no** feature report | not used |
 
 So the settings node is picked by "carries a ≥64-byte feature report",
-preferring a known USB id. `gamakay list` shows which node that is. Selection
+preferring a known USB id. `lk67ctl list` shows which node that is. Selection
 therefore looks for "carries the settings report", which on a machine with other
 HID hardware picks the wrong device — this machine's Corsair mouse carries one
 too — so front-ends gate on the device's identity
-(`gamakay_core::device::is_gamakay`) before writing anything.
+(`lk67_core::device::is_lk67ctl`) before writing anything.
 
 ### Scope: USB cable
 
@@ -92,7 +92,7 @@ rules follow:
    A SET does answer with the applied state, but reading it back immediately is
    exactly the transfer that stalls the pipe. The value is applied either way.
 2. **Commit pause.** Leave a gap (~1.5 s is safe) after a SET before the next
-   command, in this run or the next. `gamakay` sleeps this automatically
+   command, in this run or the next. `lk67ctl` sleeps this automatically
    (`WRITE_COMMIT_MS`); a command run by hand right after a write should wait.
 
 Reads never stall, and a write is preceded by a small gap (`WRITE_GAP_MS`)
@@ -171,7 +171,7 @@ in Phase 3.
 
 ## Block-list
 
-Never sent by this tool, by name (`gamakay-core::guard::BLOCKED`):
+Never sent by this tool, by name (`lk67-core::guard::BLOCKED`):
 
 | opcode | why |
 |---|---|
@@ -190,7 +190,7 @@ There is **no firmware flashing path** in this project.
 Before any write phase is exercised on hardware, record and verify the reset
 procedure:
 
-1. Preferred: `gamakay keymap reset --yes` (sends `0x02`).
+1. Preferred: `lk67ctl keymap reset --yes` (sends `0x02`).
 2. Hardware, if the board stops responding to the tool: the LK67 factory
    reset key combo (`Fn` + `Esc` held ~3 s, then release) restores defaults.
    Confirm against the vendor manual before relying on it.
@@ -321,7 +321,7 @@ part of why the feature was written off. Capture:
   wrote the wrong slot, so remapping Ins/Del appeared to do nothing.
   There is no `Insert` in the factory keymap at all (`Ins` is Fn+J). The knob is
   programmable through slots 23 (Vol−), 29 (Vol+) and 75 (Play/Pause). Positions
-  come from a photo of the board (`crates/gamakay-core/src/layout.rs`).
+  come from a photo of the board (`crates/lk67-core/src/layout.rs`).
 - **Single-slot write `0x13` is ignored** on this unit: the write is accepted
   but the slot does not change on read-back. Same for the Fn single write.
 - **Bulk layer write `0x09` works:** `[profile, 0xF8, 1, page]` + 56 bytes at
@@ -333,7 +333,7 @@ part of why the feature was written off. Capture:
   section below. The Fn single write `0x15` is likewise ignored; the Fn bulk
   write `0x10` works.
 - **Reset** is the factory reset `0x02`; it resets the whole keyboard, not one
-  layer, so `gamakay keymap reset` requires `--yes`. Not exercised on
+  layer, so `lk67ctl keymap reset` requires `--yes`. Not exercised on
   hardware (destructive).
 - Writes use the same fire-and-forget + commit-pause flow as lighting; a
   multi-page write spaces its pages (`PAGE_GAP_MS`) and takes one commit pause

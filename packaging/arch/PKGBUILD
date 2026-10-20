@@ -1,18 +1,22 @@
-# Maintainer: GamakayLinux contributors
-# Arch/CachyOS package for GamakayLinux: the CLI, the iced GUI, the udev rule,
+# Maintainer: lk67ctl contributors
+# Arch/CachyOS package for lk67ctl: the CLI, the iced GUI, the udev rule,
 # the desktop entry and its icons.
 #
 # pkgver is kept in step with the workspace Cargo.toml version by
 # scripts/check-release-version.sh; `make package-arch` builds it.
 
-pkgname=gamakaylinux
+pkgname=lk67ctl
 pkgver=0.2.1
 pkgrel=1
 pkgdesc="Configure the GamaKay LK67 keyboard from Linux over USB"
 # x86_64 only: nothing builds or verifies aarch64, and claiming it would ship a
 # package no one has tested.
 arch=('x86_64')
-url="https://github.com/AessemOps/GamakayLinux"
+# 0.3.0 renamed the package; replacing the old one keeps a single install.
+provides=('gamakaylinux')
+conflicts=('gamakaylinux')
+replaces=('gamakaylinux')
+url="https://github.com/AessemOps/lk67ctl"
 license=('GPL-3.0-or-later')
 # The GUI loads its display, input and GPU stack with dlopen at runtime, so none
 # of it shows up in `ldd`: without these the packaged binary fails to start.
@@ -26,7 +30,7 @@ install="$pkgname.install"
 options=('!debug')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
 # GitHub's archive extracts to the *repository* name, not $pkgname.
-_archive="GamakayLinux-$pkgver"
+_archive="lk67ctl-$pkgver"
 # GitHub generates the archive from the tag, so its hash cannot exist before
 # the tag does: `updpkgsums` (or `curl -L .../archive/v$pkgver.tar.gz | sha256sum`)
 # immediately after tagging, then commit the value. The release workflow's guard
@@ -46,25 +50,25 @@ build() {
 
 package() {
   cd "$_archive"
-  install -Dm755 target/release/gamakay "$pkgdir/usr/bin/gamakay"
-  install -Dm755 target/release/gamakay-gui "$pkgdir/usr/bin/gamakay-gui"
-  install -Dm644 packaging/udev/70-gamakay.rules \
-    "$pkgdir/usr/lib/udev/rules.d/70-gamakay.rules"
-  install -Dm644 packaging/gamakay.desktop \
-    "$pkgdir/usr/share/applications/gamakay.desktop"
+  install -Dm755 target/release/lk67ctl "$pkgdir/usr/bin/lk67ctl"
+  install -Dm755 target/release/lk67-gui "$pkgdir/usr/bin/lk67-gui"
+  install -Dm644 packaging/udev/70-lk67ctl.rules \
+    "$pkgdir/usr/lib/udev/rules.d/70-lk67ctl.rules"
+  install -Dm644 packaging/lk67ctl.desktop \
+    "$pkgdir/usr/share/applications/lk67ctl.desktop"
 
-  install -Dm644 packaging/io.github.aessemops.gamakaylinux.metainfo.xml \
-    "$pkgdir/usr/share/metainfo/io.github.aessemops.gamakaylinux.metainfo.xml"
+  install -Dm644 packaging/io.github.aessemops.lk67ctl.metainfo.xml \
+    "$pkgdir/usr/share/metainfo/io.github.aessemops.lk67ctl.metainfo.xml"
 
   for size in 16 24 32 48 64 128 256 512; do
-    install -Dm644 "packaging/icons/hicolor/${size}x${size}/apps/gamakay.png" \
-      "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/gamakay.png"
+    install -Dm644 "packaging/icons/hicolor/${size}x${size}/apps/lk67ctl.png" \
+      "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/lk67ctl.png"
   done
 
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 CREDITS.md "$pkgdir/usr/share/licenses/$pkgname/CREDITS.md"
   # OFL-1.1 requires the licence to travel with the bundled emoji font.
-  install -Dm644 crates/gamakay-gui/assets/NotoEmoji-OFL.txt \
+  install -Dm644 crates/lk67-gui/assets/NotoEmoji-OFL.txt \
     "$pkgdir/usr/share/licenses/$pkgname/NotoEmoji-OFL.txt"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
   install -Dm644 CHANGELOG.md "$pkgdir/usr/share/doc/$pkgname/CHANGELOG.md"

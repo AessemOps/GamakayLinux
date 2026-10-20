@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Instructions for AI agents (and humans in a hurry) working on GamakayLinux.
+Instructions for AI agents (and humans in a hurry) working on lk67ctl.
 This is the stable operating manual: commands, workflow, conventions.
 For **current state** — what is implemented, what is open — read
 [`README.md`](README.md) and [`docs/protocol.md`](docs/protocol.md). The
@@ -23,14 +23,14 @@ guard refuses a block-list of destructive and bootloader opcodes by name.
 
 | Path | What it is |
 |---|---|
-| `crates/gamakay-core/` | Protocol packets/checksums, opcode table, device table, safety guard, `Transport` trait, `Session`, decode/encode, `MockTransport` |
-| `crates/gamakay-hidraw/` | Linux hidraw transport: sysfs enumeration, report-descriptor parse, `HIDIOCSFEATURE`/`HIDIOCGFEATURE` ioctls, plus the `raw` example |
-| `crates/gamakay-cli/` | The `gamakay` binary (`clap`) |
-| `crates/gamakay-gui/` | The iced 0.14 app (`gamakay-gui`): tabs over the same core, a keyboard canvas, an underglow panel, device I/O on a worker thread |
+| `crates/lk67-core/` | Protocol packets/checksums, opcode table, device table, safety guard, `Transport` trait, `Session`, decode/encode, `MockTransport` |
+| `crates/lk67-hidraw/` | Linux hidraw transport: sysfs enumeration, report-descriptor parse, `HIDIOCSFEATURE`/`HIDIOCGFEATURE` ioctls, plus the `raw` example |
+| `crates/lk67-cli/` | The `lk67ctl` binary (`clap`) |
+| `crates/lk67-gui/` | The iced 0.14 app (`lk67-gui`): tabs over the same core, a keyboard canvas, an underglow panel, device I/O on a worker thread |
 | `docs/protocol.md` | Command reference, byte layouts, transport matrix — the **allow-list source of truth** |
 | `docs/re-workflow.md` | How the protocol was captured and how to extend it |
 | `tests/fixtures/` | Decoded packet fixtures (hex captured from hardware) |
-| `packaging/` | udev rule, `gamakay.desktop`, Arch/CachyOS `PKGBUILD` |
+| `packaging/` | udev rule, `lk67ctl.desktop`, Arch/CachyOS `PKGBUILD` |
 | `.kilo/plans/` | Implementation plans (committed) |
 
 ## Commands
@@ -38,8 +38,8 @@ guard refuses a block-list of destructive and bootloader opcodes by name.
 `make lint` checks formatting and lints; `make check` runs that plus the tests.
 
 ```bash
-cargo build --release            # gamakay: LTO, stripped, panic=abort
-cargo build -p gamakay-gui       # the iced GUI (gamakay-gui)
+cargo build --release             # lk67ctl: LTO, stripped, panic=abort
+cargo build -p lk67-gui            # the iced GUI (lk67-gui)
 cargo test                       # unit tests + hardware fixture replay
 
 cargo fmt --all --check          # formatting gate
@@ -52,25 +52,25 @@ make check                       # fmt + clippy + test
 Reading one raw reply during protocol work (open the node first, see below):
 
 ```bash
-cargo run -p gamakay-hidraw --example raw -- /dev/hidraw0 0x92
+cargo run -p lk67-hidraw --example raw -- /dev/hidraw0 0x92
 ```
 
-On-device checks need `/dev/hidraw*` access; `gamakay list` only reads sysfs
+On-device checks need `/dev/hidraw*` access; `lk67ctl list` only reads sysfs
 and needs none:
 
 ```bash
-gamakay list                     # enumerate nodes, marks the settings node
-gamakay info                     # identify + read current settings
-gamakay --device /dev/hidraw0 info
-gamakay light                    # show backlight (and edge light)
-gamakay light set --mode wave --color ff0000 --brightness 3 --speed 2
-gamakay light edge set --mode breathing --color 00ffff   # the underglow
-gamakay apply ~/.config/gamakay/profiles/<name>.toml
-gamakay keymap get               # dump the base layer
-gamakay keymap set --key CapsLock --to Esc
-gamakay macro list               # onboard macros
-gamakay macro set 0 --repeat 1 --steps "A+@20, A-@20"
-gamakay keymap set --slot 20 --to macro:0   # bind macro 0 to a key
+lk67ctl list                     # enumerate nodes, marks the settings node
+lk67ctl info                     # identify + read current settings
+lk67ctl --device /dev/hidraw0 info
+lk67ctl light                    # show backlight (and edge light)
+lk67ctl light set --mode wave --color ff0000 --brightness 3 --speed 2
+lk67ctl light edge set --mode breathing --color 00ffff   # the underglow
+lk67ctl apply ~/.config/lk67ctl/profiles/<name>.toml
+lk67ctl keymap get               # dump the base layer
+lk67ctl keymap set --key CapsLock --to Esc
+lk67ctl macro list               # onboard macros
+lk67ctl macro set 0 --repeat 1 --steps "A+@20, A-@20"
+lk67ctl keymap set --slot 20 --to macro:0   # bind macro 0 to a key
 ```
 
 ## Workflow
@@ -90,7 +90,7 @@ gamakay keymap set --slot 20 --to macro:0   # bind macro 0 to a key
 
 ## Safety rules (non-negotiable)
 
-1. **No flashing.** `gamakay-core::guard::BLOCKED` lists the destructive and
+1. **No flashing.** `lk67-core::guard::BLOCKED` lists the destructive and
    bootloader opcodes (`0xAC`, `0x2C`, `0x7F`, `0x30`, `0x1C`, `0x1E`, `0xF8`,
    `0xBA`). Every packet leaves through `Guard::build`; never bypass it.
 2. **A command may enter `ALLOWED` only after its write is capture- or

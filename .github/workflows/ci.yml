@@ -76,7 +76,7 @@ jobs:
         run: ./scripts/check-release-version.sh
       - name: The desktop entry's icon is shipped
         run: |-
-          icon="$(sed -n 's/^Icon=//p' packaging/gamakay.desktop)"
+          icon="$(sed -n 's/^Icon=//p' packaging/lk67ctl.desktop)"
           test -n "$icon" || { echo "no Icon= in the desktop entry"; exit 1; }
           test -f "packaging/icons/$icon.png"
           for size in 16 24 32 48 64 128 256 512; do

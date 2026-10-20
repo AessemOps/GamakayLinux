@@ -1,5 +1,5 @@
-# Example gamakay lighting profile.
-# Copy to ~/.config/gamakay/profiles/<name>.toml and run `gamakay apply <name>`.
+# Example lk67ctl lighting profile.
+# Copy to ~/.config/lk67ctl/profiles/<name>.toml and run `lk67ctl apply <name>`.
 # Unspecified fields keep their current value.
 
 [backlight]

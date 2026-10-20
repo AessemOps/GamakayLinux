@@ -7,10 +7,10 @@ needs, so each format uses the tool that owns it rather than a hand-written
 
 | format | built by | artefact | tool |
 |---|---|---|---|
-| Arch / CachyOS | `make package-arch` | `gamakaylinux-<ver>-1-<arch>.pkg.tar.zst` | `makepkg`, `packaging/arch/PKGBUILD` |
-| Debian / Ubuntu | `make package-deb` | `gamakaylinux_<ver>_amd64.deb` | `nfpm` |
-| Fedora / RHEL | `make package-rpm` | `gamakaylinux-<ver>-1.x86_64.rpm` | `nfpm` |
-| any Linux (portable) | `make package-appimage` | `GamakayLinux-<ver>-x86_64.AppImage` | `appimagetool` |
+| Arch / CachyOS | `make package-arch` | `lk67ctl-<ver>-1-<arch>.pkg.tar.zst` | `makepkg`, `packaging/arch/PKGBUILD` |
+| Debian / Ubuntu | `make package-deb` | `lk67ctl_<ver>_amd64.deb` | `nfpm` |
+| Fedora / RHEL | `make package-rpm` | `lk67ctl-<ver>-1.x86_64.rpm` | `nfpm` |
+| any Linux (portable) | `make package-appimage` | `lk67ctl-<ver>-x86_64.AppImage` | `appimagetool` |
 
 `make packages` builds the deb, the rpm and the AppImage; the Arch package needs
 an Arch host (or container) for `makepkg`, and its `PKGBUILD` sources the
@@ -21,12 +21,12 @@ working tree so it can run before a tag exists.
 ## What a package installs
 
 ```
-/usr/bin/gamakay                       CLI
-/usr/bin/gamakay-gui                   iced GUI
-/usr/lib/udev/rules.d/70-gamakay.rules grants the local user the hidraw node
-/usr/share/applications/gamakay.desktop
-/usr/share/metainfo/io.github.aessemops.gamakaylinux.metainfo.xml           AppStream, for software centres
-/usr/share/icons/hicolor/<size>/apps/gamakay.png  16..512
+/usr/bin/lk67ctl                       CLI
+/usr/bin/lk67-gui                   iced GUI
+/usr/lib/udev/rules.d/70-lk67ctl.rules grants the local user the hidraw node
+/usr/share/applications/lk67ctl.desktop
+/usr/share/metainfo/io.github.aessemops.lk67ctl.metainfo.xml           AppStream, for software centres
+/usr/share/icons/hicolor/<size>/apps/lk67ctl.png  16..512
 LICENSE, CREDITS.md, README.md         per-format location
 ```
 
@@ -72,7 +72,7 @@ the `.deb` (no `dpkg-deb` needed) and `rpm -qpi/-qpl` with a scratch database fo
 the `.rpm`.
 
 The icons are committed, so a package build needs no image tooling. They are
-generated from `packaging/icons/gamakay.svg` by `scripts/make-icons.sh` when the
+generated from `packaging/icons/lk67ctl.svg` by `scripts/make-icons.sh` when the
 SVG changes.
 
 ## Source integrity in the Arch package
@@ -107,14 +107,14 @@ container, as `makepkg` requires, with an unprivileged build user since it
 refuses to run as root.
 
 Each format is then **installed into a container of its own distribution and
-run** — `gamakay --version`, which needs no keyboard — so a package that cannot
+run** — `lk67ctl --version`, which needs no keyboard — so a package that cannot
 start fails in CI rather than on a user's machine. That is the check Phase 6
 exists to make.
 
 ## Decisions worth knowing
 
 **The AppImage bundles the binaries, the desktop entry and the icon. It does not
-bundle the display stack.** `gamakay-gui` loads `libxkbcommon`, Wayland/X11 and
+bundle the display stack.** `lk67-gui` loads `libxkbcommon`, Wayland/X11 and
 the GL/Vulkan loader with `dlopen` at runtime, so none of them appear in `ldd`;
 bundling them fixes the versions at build time and would clash with a newer host
 just as often as it helps. Every desktop already provides them.
@@ -126,10 +126,10 @@ depend on the right font package per distribution (`fonts-dejavu-core`,
 compiled into the binary.
 
 **The AppImage ships the rule but cannot activate it.** Use it read-only, or
-install the rule by hand (`/usr/share/udev/70-gamakay.rules` inside the
+install the rule by hand (`/usr/share/udev/70-lk67ctl.rules` inside the
 AppImage, documented in the README).
 
-**One AppImage, two entry points.** `AppRun` sends a CLI subcommand to `gamakay`
-and everything else to `gamakay-gui`, so the archive is both the desktop app and
+**One AppImage, two entry points.** `AppRun` sends a CLI subcommand to `lk67ctl`
+and everything else to `lk67-gui`, so the archive is both the desktop app and
 a usable CLI — and so CI can run it with no display. `info` is ambiguous (a CLI
 subcommand and a GUI tab); the CLI wins, and `--gui info` opens the tab.

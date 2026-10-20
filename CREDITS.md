@@ -1,6 +1,6 @@
 # Credits
 
-GamakayLinux is GPL-3.0-or-later. It stands on protocol work done by others;
+lk67ctl is GPL-3.0-or-later. It stands on protocol work done by others;
 this file records what was used and how. `Last reviewed: 2026-10-17 (iced 0.14 upgrade)`.
 
 ## Protocol references
@@ -11,7 +11,7 @@ this file records what was used and how. `Last reviewed: 2026-10-17 (iced 0.14 u
   `<root@dnim.dev>`, **GPL-3.0-or-later**.
 - What: a ROYUAN keyboard tool. It does **not** support the LK67, so it is no
   longer a reference for this board's protocol, geometry or command set.
-- How used: exactly one file — `crates/gamakay-gui/src/patterns.rs` is a port
+- How used: exactly one file — `crates/lk67-gui/src/patterns.rs` is a port
   of sharkfin's `app/src/lib/effects.ts` (per-mode preview animations); the
   ported file carries the upstream copyright header. Its fidelity for the LK67
   is unverified, since the upstream tool targets other boards; the real fix is
@@ -21,7 +21,7 @@ this file records what was used and how. `Last reviewed: 2026-10-17 (iced 0.14 u
 
 ### OpenRGB (LK67 fork)
 
-- Project: [open-rgb-gamakay-lk67](https://gitlab.com/kuba.dajek4/open-rgb-gamakay-lk67),
+- Project: [open-rgb-lk67ctl-lk67](https://gitlab.com/kuba.dajek4/open-rgb-lk67ctl-lk67),
   a fork of [OpenRGB](https://gitlab.com/CalcProgrammer1/OpenRGB), **GPL-2.0-or-later**.
 - What: an independent Linux implementation of GamaKay lighting.
 - How used: reference only, if at all; any ported file will carry a provenance
@@ -41,7 +41,7 @@ this file records what was used and how. `Last reviewed: 2026-10-17 (iced 0.14 u
 - Project: [Noto Emoji](https://fonts.google.com/noto/specimen/Noto+Emoji),
   © Google, **SIL Open Font License 1.1**.
 - What: the monochrome emoji font.
-- How used: bundled as `crates/gamakay-gui/assets/NotoEmoji.ttf`, with its
+- How used: bundled as `crates/lk67-gui/assets/NotoEmoji.ttf`, with its
   licence alongside as `NotoEmoji-OFL.txt`, and loaded at startup. It is the
   only font available here with the emoji the keyboard previews draw (🐧 ⏸ 🔒 🍎
   🤖 💡): DejaVu Sans has none of them, the packaged Noto fonts are missing some,

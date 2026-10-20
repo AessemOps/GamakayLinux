@@ -9,7 +9,7 @@ name: release
 #
 # Each format is then installed into a container of its own distribution and the
 # installed binary is run, so a package that cannot start is caught here rather
-# than by a user. `gamakay --version` and `gamakay list` need no keyboard.
+# than by a user. `lk67ctl --version` and `lk67ctl list` need no keyboard.
 
 on:
   push:
@@ -52,7 +52,7 @@ jobs:
             exit 0
           fi
           pinned="$(sed -n "s/^sha256sums=('\\([0-9a-f]\\{64\\}\\)').*/\\1/p" packaging/arch/PKGBUILD)"
-          actual="$(curl -fsSL "https://github.com/AessemOps/GamakayLinux/archive/v$version.tar.gz" | sha256sum | cut -d' ' -f1)"
+          actual="$(curl -fsSL "https://github.com/AessemOps/lk67ctl/archive/v$version.tar.gz" | sha256sum | cut -d' ' -f1)"
           echo "pinned: ${pinned:-<SKIP>}"
           echo "actual: $actual"
           if [ -z "$pinned" ]; then
@@ -145,7 +145,7 @@ jobs:
       - name: Build the package in an Arch container
         run: |-
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
-          url="https://github.com/AessemOps/GamakayLinux"
+          url="https://github.com/AessemOps/lk67ctl"
           rm -rf /tmp/src && mkdir -p /tmp/src
           # Prefer the *published* archive for this version: those are the exact
           # bytes the PKGBUILD's sha256sums pins, and the bytes a user builds
@@ -154,23 +154,23 @@ jobs:
           # to be skipped, because the pinned hash is for the published bytes,
           # which differ (different gzip, different metadata).
           #
-          # The synthetic prefix must be what GitHub uses ("GamakayLinux-<v>",
+          # The synthetic prefix must be what GitHub uses ("lk67ctl-<v>",
           # the repository name) or the PKGBUILD's `cd` fails; that mistake is
           # what let a broken PKGBUILD pass CI once.
           if [ -z "${GITHUB_REF_TYPE:-}" ] || [ "${GITHUB_REF_TYPE}" != "tag" ]; then
-            if curl -fsSL -o "/tmp/src/gamakaylinux-$version.tar.gz" \
+            if curl -fsSL -o "/tmp/src/lk67ctl-$version.tar.gz" \
                 "$url/archive/v$version.tar.gz"; then
               echo "using the published v$version archive" | tee -a "$GITHUB_STEP_SUMMARY"
               checksum_arg=""
             else
               echo "no published v$version archive; synthesising the source tarball" | tee -a "$GITHUB_STEP_SUMMARY"
-              git archive --prefix="GamakayLinux-$version/" HEAD \
-                | gzip -9 > "/tmp/src/gamakaylinux-$version.tar.gz"
+              git archive --prefix="lk67ctl-$version/" HEAD \
+                | gzip -9 > "/tmp/src/lk67ctl-$version.tar.gz"
               checksum_arg="--skipchecksums"
             fi
           else
             # On a tag the archive must exist; let makepkg enforce the checksum.
-            curl -fsSL -o "/tmp/src/gamakaylinux-$version.tar.gz" \
+            curl -fsSL -o "/tmp/src/lk67ctl-$version.tar.gz" \
               "$url/archive/v$version.tar.gz"
             checksum_arg=""
           fi
@@ -179,8 +179,8 @@ jobs:
               pacman -Syu --noconfirm --needed base-devel git rust cargo >/dev/null
               useradd -m builder
               install -d -o builder -g builder /home/builder/pkg
-              install -o builder -g builder -m644 /src/gamakaylinux-*.tar.gz /home/builder/pkg/
-              su builder -c \"cd ~/pkg && tar xzf gamakaylinux-*.tar.gz --wildcards 'GamakayLinux-*/packaging/arch/*' && install -m644 GamakayLinux-*/packaging/arch/PKGBUILD GamakayLinux-*/packaging/arch/gamakaylinux.install . && makepkg -f --noconfirm --nodeps $checksum_arg\"
+              install -o builder -g builder -m644 /src/lk67ctl-*.tar.gz /home/builder/pkg/
+              su builder -c \"cd ~/pkg && tar xzf lk67ctl-*.tar.gz --wildcards 'lk67ctl-*/packaging/arch/*' && install -m644 lk67ctl-*/packaging/arch/PKGBUILD lk67ctl-*/packaging/arch/lk67ctl.install . && makepkg -f --noconfirm --nodeps $checksum_arg\"
               install -m644 /home/builder/pkg/*.pkg.tar.zst /out/
             "
           ls -l out
@@ -194,10 +194,10 @@ jobs:
               # GL and no fonts, and the package must still build.
               useradd -m builder
               install -d -o builder -g builder /home/builder/pkg
-              install -o builder -g builder -m644 /src/gamakaylinux-*.tar.gz /home/builder/pkg/
+              install -o builder -g builder -m644 /src/lk67ctl-*.tar.gz /home/builder/pkg/
               # The PKGBUILD and its install scriptlet come out of the tarball
               # we just built, so they cannot drift from the source being built.
-              su builder -c "cd ~/pkg && tar xzf gamakaylinux-*.tar.gz --wildcards 'GamakayLinux-*/packaging/arch/*' && install -m644 GamakayLinux-*/packaging/arch/PKGBUILD GamakayLinux-*/packaging/arch/gamakaylinux.install . && makepkg -f --noconfirm --nodeps"
+              su builder -c "cd ~/pkg && tar xzf lk67ctl-*.tar.gz --wildcards 'lk67ctl-*/packaging/arch/*' && install -m644 lk67ctl-*/packaging/arch/PKGBUILD lk67ctl-*/packaging/arch/lk67ctl.install . && makepkg -f --noconfirm --nodeps"
               install -m644 /home/builder/pkg/*.pkg.tar.zst /out/
             '
           ls -l out
@@ -207,11 +207,11 @@ jobs:
           docker run --rm -v "$PWD/out:/out:ro" archlinux@sha256:3c64b538588416593f69a1aebd2f2ec0f2541b29159f32556fa7def2167147a0 bash -euo pipefail -c '
             pacman -Syu --noconfirm --needed >/dev/null
             pacman -U --noconfirm /out/*.pkg.tar.zst
-            gamakay --version
-            gamakay list
-            test -f /usr/share/applications/gamakay.desktop
-            test -f /usr/share/icons/hicolor/256x256/apps/gamakay.png
-            test -f /usr/lib/udev/rules.d/70-gamakay.rules
+            lk67ctl --version
+            lk67ctl list
+            test -f /usr/share/applications/lk67ctl.desktop
+            test -f /usr/share/icons/hicolor/256x256/apps/lk67ctl.png
+            test -f /usr/lib/udev/rules.d/70-lk67ctl.rules
           '
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -233,11 +233,11 @@ jobs:
       - name: Install the .deb and run it
         run: |-
           sudo apt-get update
-          sudo apt-get install -y ./dist/gamakaylinux_*_amd64.deb
-          gamakay --version
-          gamakay list
-          test -f /usr/share/applications/gamakay.desktop
-          test -f /usr/share/icons/hicolor/256x256/apps/gamakay.png
+          sudo apt-get install -y ./dist/lk67ctl_*_amd64.deb
+          lk67ctl --version
+          lk67ctl list
+          test -f /usr/share/applications/lk67ctl.desktop
+          test -f /usr/share/icons/hicolor/256x256/apps/lk67ctl.png
 
   verify-rpm:
     needs: build
@@ -253,11 +253,11 @@ jobs:
           path: dist
       - name: Install the .rpm and run it
         run: |-
-          dnf install -y ./dist/gamakaylinux-*.rpm
-          gamakay --version
-          gamakay list
-          test -f /usr/share/applications/gamakay.desktop
-          test -f /usr/share/icons/hicolor/256x256/apps/gamakay.png
+          dnf install -y ./dist/lk67ctl-*.rpm
+          lk67ctl --version
+          lk67ctl list
+          test -f /usr/share/applications/lk67ctl.desktop
+          test -f /usr/share/icons/hicolor/256x256/apps/lk67ctl.png
 
   verify-appimage:
     needs: build
@@ -271,8 +271,8 @@ jobs:
         run: |-
           chmod +x dist/*.AppImage
           # No FUSE on a runner: extract and run instead.
-          ./dist/GamakayLinux-*-x86_64.AppImage --appimage-extract-and-run --version
-          ./dist/GamakayLinux-*-x86_64.AppImage --appimage-extract-and-run list
+          ./dist/lk67ctl-*-x86_64.AppImage --appimage-extract-and-run --version
+          ./dist/lk67ctl-*-x86_64.AppImage --appimage-extract-and-run list
 
   release:
     needs: [build, arch, verify-deb, verify-rpm, verify-appimage]
