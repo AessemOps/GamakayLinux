@@ -4,6 +4,15 @@ All notable changes to this project. Version numbers are the tags; the workspace
 `Cargo.toml` version is the source of truth and `scripts/check-release-version.sh`
 keeps the PKGBUILD in step with it.
 
+## 0.3.1 — 2026-10-20
+
+### Fixed
+
+- **The GUI shows its own name again.** The window title and the sidebar
+  heading still said "GamaKay" after the rename; they now read `lk67ctl`. The
+  device-recognition messages in the GUI and the CLI say "not a recognised
+  LK67", since that is the only board the tool drives.
+
 ## 0.3.0 — 2026-10-20
 
 ### Changed

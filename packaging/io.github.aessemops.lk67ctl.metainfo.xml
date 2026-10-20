@@ -39,6 +39,12 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.3.1" date="2026-10-20">
+      <description>
+        <p>The window title and sidebar heading now show lk67ctl, and the
+           recognition messages name the LK67 rather than the vendor.</p>
+      </description>
+    </release>
     <release version="0.3.0" date="2026-10-20">
       <description>
         <p>Renamed to lk67ctl. The tool covers one board, the GamaKay LK67, and

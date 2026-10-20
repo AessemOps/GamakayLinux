@@ -1663,7 +1663,7 @@ checksum = "4744e383959f0db86ede514b809b1c53251889093803c05267acc7d4e7030d70"
 
 [[package]]
 name = "lk67-cli"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1675,11 +1675,11 @@ dependencies = [
 
 [[package]]
 name = "lk67-core"
-version = "0.3.0"
+version = "0.3.1"
 
 [[package]]
 name = "lk67-gui"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "iced",
  "lk67-core",
@@ -1689,7 +1689,7 @@ dependencies = [
 
 [[package]]
 name = "lk67-hidraw"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "libc",
  "lk67-core",
