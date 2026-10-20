@@ -231,7 +231,7 @@ impl Worker {
         // packets. Only a board this project drives may be written to.
         if !info.is_lk67ctl() {
             self.emit(Event::Error(format!(
-                "{} ({:04x}:{:04x}, {}) is not a recognised GamaKay keyboard",
+                "{} ({:04x}:{:04x}, {}) is not a recognised LK67",
                 info.path.display(),
                 info.vendor_id,
                 info.product_id,

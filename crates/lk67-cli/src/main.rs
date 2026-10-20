@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! `lk67ctl`: configure a GamaKay keyboard from Linux over hidraw.
+//! `lk67ctl`: configure the GamaKay LK67 from Linux over hidraw.
 //!
 //! Read commands (`list`, `info`) and the Phase 2 lighting commands
 //! (`light`, `apply`). Every write goes through the core safety guard.
@@ -253,15 +253,14 @@ pub(crate) fn select_device(cli: &Cli) -> Result<HidrawInfo> {
     let found = match &cli.device {
         Some(path) => lk67_hidraw::find(path)
             .with_context(|| format!("no hidraw node at {}", path.display()))?,
-        None => lk67_hidraw::find_supported()
-            .ok_or_else(|| anyhow::anyhow!("no GamaKay keyboard found"))?,
+        None => lk67_hidraw::find_supported().ok_or_else(|| anyhow::anyhow!("no LK67 found"))?,
     };
     // "Carries a 64-byte feature report" alone picks the wrong device: on this
     // machine the Corsair mouse has one too, so a node whose ids (or Bluetooth
     // connection) are not ours must be refused unless the user insists.
     if !found.is_lk67ctl() && !cli.force {
         bail!(
-            "the node {} ({:04x}:{:04x}, {}) is not a recognised GamaKay device; pass --force to try it",
+            "the node {} ({:04x}:{:04x}, {}) is not a recognised LK67; pass --force to try it",
             found.path.display(),
             found.vendor_id,
             found.product_id,

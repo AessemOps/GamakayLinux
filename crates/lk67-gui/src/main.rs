@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! GamaKay GUI (iced 0.14). All device I/O runs on the [`worker`] thread; the
+//! lk67ctl GUI (iced 0.14). All device I/O runs on the [`worker`] thread; the
 //! UI only sends requests and reacts to events, so it never blocks and does no
 //! work while idle.
 
@@ -43,7 +43,7 @@ fn main() -> iced::Result {
     // 0.14 takes a boot function as the first argument; the title is a builder
     // method now.
     iced::application(App::new, App::update, App::view)
-        .title("GamaKay")
+        .title("lk67ctl")
         .subscription(App::subscription)
         .theme(App::theme)
         // Monochrome Noto Emoji, bundled: it is the only font here with the
@@ -675,7 +675,7 @@ impl App {
             .collect();
         container(
             column![
-                text("GamaKay").size(20),
+                text("lk67ctl").size(20),
                 text(model).size(12),
                 space::horizontal().height(Length::Fixed(6.0)),
                 column(menu).spacing(4),
