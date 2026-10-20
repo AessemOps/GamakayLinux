@@ -4,6 +4,19 @@ All notable changes to this project. Version numbers are the tags; the workspace
 `Cargo.toml` version is the source of truth and `scripts/check-release-version.sh`
 keeps the PKGBUILD in step with it.
 
+## 0.3.0 — 2026-10-20
+
+### Changed
+
+- **Renamed to `lk67ctl`.** The tool supports exactly one board, the GamaKay
+  LK67, and the old name put the vendor's trademark where a product name
+  belongs. The binaries are `lk67ctl` and `lk67-gui`; the crates, package,
+  desktop entry, AppStream id, icons and udev rule follow, and the repository
+  moves to `AessemOps/lk67ctl`. The Arch, deb and rpm packages declare that they
+  replace `gamakaylinux` rather than colliding with it, and named profiles are
+  read from `~/.config/lk67ctl/profiles`, falling back to the old
+  `~/.config/gamakay/profiles` when the new directory does not exist.
+
 ## 0.2.1 — 2026-10-20
 
 ### Added
@@ -29,7 +42,7 @@ absent, because that is what GamaKay's software says: it exposes no control for
 them, and its record for this board reports no side light. The board disagrees —
 the LEDs are there, the firmware drives them through `SET 0x08`, and it answers
 `GET 0x88` with the stored parameter. The GUI gains an **Underglow** panel
-(mode, including off, and colour), `gamakay light edge` works without `--force`
+(mode, including off, and colour), `lk67ctl light edge` works without `--force`
 and answers to the name `underglow` too, and the record is corrected.
 
 Measured rather than assumed, with the key backlight pinned to a fixed colour so
@@ -60,13 +73,13 @@ accepted as `--mode 0`, as the protocol documents, not only as `off`.
 (8 hicolor sizes, the same PNG the AppImage uses) — what was missing was the link
 between the *running window* and the desktop entry. iced sets a window's
 application id only when the application asks, so `WM_CLASS` was empty and a
-desktop shell had nothing to match `gamakay.desktop` against: the taskbar showed
+desktop shell had nothing to match `lk67ctl.desktop` against: the taskbar showed
 a generic icon and the window did not group under its launcher entry. The window
-now announces `application_id = "gamakay"`, matching the desktop file's basename
+now announces `application_id = "lk67ctl"`, matching the desktop file's basename
 as iced documents, which is `WM_CLASS` on X11 and the app id on Wayland.
 
 Verified on the hardware: `WM_CLASS` went from `"", ""` to
-`"gamakay", "gamakay"`, with the window geometry unchanged.
+`"lk67ctl", "lk67ctl"`, with the window geometry unchanged.
 
 **Packaging and CI.** The Arch job builds from the *published* archive — the
 bytes the PKGBUILD's `sha256sums` pins, and the bytes a user builds from — rather
@@ -92,7 +105,7 @@ CLI, packaged for the four common Linux targets.
   VIA-style flow), or with a key picker. Plus `keymap reset`.
 - Macros: 50 onboard slots, a GUI recorder (press Record, type, Stop, save) that
   captures delays, and a CLI step DSL.
-- TOML profiles for lighting and remaps (`gamakay apply`).
+- TOML profiles for lighting and remaps (`lk67ctl apply`).
 - `--dry-run` on every command: prints the packets a command would send.
 - An iced GUI whose device access runs on a worker thread, so a slow board never
   freezes the window.
@@ -161,7 +174,7 @@ things that would have shipped. Fixed:
   the board does not have; the changelog claimed indexes were range-checked.
   They are now, with a test that fails if the bound is dropped again.
 - **The Arch package could not build from the real tag tarball.** GitHub extracts
-  a tag to `<repo>-<version>` (`GamakayLinux-0.1.0`), not `$pkgname-$pkgver`, so
+  a tag to `<repo>-<version>` (`lk67ctl-0.1.0`), not `$pkgname-$pkgver`, so
   `cd "$pkgname-$pkgver"` failed. CI renamed the directory, which hid it; CI now
   produces the real layout, and the package is built from it here.
 - **The README documented the tool as refusing the firmware-owned Fn slots.** It

@@ -19,20 +19,20 @@ export PATH="$here/usr/bin:$PATH"
 
 case "${1:-}" in
     "")
-        exec "$here/usr/bin/gamakay-gui"
+        exec "$here/usr/bin/lk67-gui"
         ;;
     --gui)
         shift
-        exec "$here/usr/bin/gamakay-gui" "$@"
+        exec "$here/usr/bin/lk67-gui" "$@"
         ;;
     --cli)
         shift
-        exec "$here/usr/bin/gamakay" "$@"
+        exec "$here/usr/bin/lk67ctl" "$@"
         ;;
     -* | list | info | light | keymap | macro | apply)
-        exec "$here/usr/bin/gamakay" "$@"
+        exec "$here/usr/bin/lk67ctl" "$@"
         ;;
     *)
-        exec "$here/usr/bin/gamakay-gui" "$@"
+        exec "$here/usr/bin/lk67-gui" "$@"
         ;;
 esac

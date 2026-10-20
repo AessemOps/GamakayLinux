@@ -30,7 +30,7 @@ descriptor if xxd is not enough.
 
 ## 1. Extract the vendor app
 
-The LK67 software downloads from <https://gamakay.com/pages/downloads>. It is
+The LK67 software downloads from <https://lk67ctl.com/pages/downloads>. It is
 an Electron build:
 
 ```bash
@@ -38,7 +38,7 @@ npx @electron/asar extract app.asar vendor/app
 ```
 
 Then read `vendor/app/main.js` / `index.js` for the device table (look for
-`yzw_lk67`, `featureReportByteLength`, `company: "gamakay2"`) and the packet
+`yzw_lk67`, `featureReportByteLength`, `company: "lk67ctl2"`) and the packet
 builders (header, opcode, checksum, page/chunk loops). Write only the decoded
 layout into `docs/protocol.md`.
 
@@ -84,12 +84,12 @@ against the official app in the Windows VM in both directions.
 `/dev/hidraw*` is root-only by default. Install the udev rule once:
 
 ```bash
-sudo install -Dm644 packaging/udev/70-gamakay.rules /etc/udev/rules.d/70-gamakay.rules
+sudo install -Dm644 packaging/udev/70-lk67ctl.rules /etc/udev/rules.d/70-lk67ctl.rules
 sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
 # replug the keyboard, then:
-gamakay list
-gamakay info
+lk67ctl list
+lk67ctl info
 ```
 
-Without the rule, `gamakay info` reports a permission error; `gamakay list`
+Without the rule, `lk67ctl info` reports a permission error; `lk67ctl list`
 still works, because it only reads sysfs.

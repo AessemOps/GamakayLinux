@@ -1,14 +1,19 @@
-# GamakayLinux
+# lk67ctl
 
 **Your GamaKay LK67, configured from Linux — natively, without the Windows app.**
 
-[![ci](https://github.com/AessemOps/GamakayLinux/actions/workflows/ci.yml/badge.svg)](https://github.com/AessemOps/GamakayLinux/actions/workflows/ci.yml)
+[![ci](https://github.com/AessemOps/lk67ctl/actions/workflows/ci.yml/badge.svg)](https://github.com/AessemOps/lk67ctl/actions/workflows/ci.yml)
 [![license: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 
 GamaKay only ships a Windows Electron app for the LK67. This is a native Rust
 replacement: lighting and the underglow, keymaps, macros and device info,
 written straight to the keyboard's own memory over USB, with a GUI and a
 scriptable CLI.
+
+**Unofficial.** "GamaKay" and "LK67" identify the maker and model of the board
+this tool configures; the project is not affiliated with, endorsed by or
+supported by GamaKay. It speaks the board's own HID protocol for
+interoperability and ships no vendor code or artwork.
 
 - **Nothing stays resident.** Every command writes to onboard memory and exits —
   no tray daemon, no background service, no kernel module.
@@ -30,54 +35,54 @@ scriptable CLI.
 | **Keymap** | Remap any key on the base **and Fn** layers, across the board's **8 profiles**. Remap by pressing a key on the keyboard, or pick one from a VIA-style list of ~115 keys — media, modifiers, macros, profiles. |
 | **Macros** | 50 onboard slots with a **recorder**: press Record, type the macro, press Stop, save it to a slot. Delays are captured, so the take keeps your typing rhythm. A CLI step DSL covers scripted cases. |
 | **Device info** | Firmware, active profile, the options the firmware exposes. |
-| **GUI + CLI** | An iced app for interactive work; a `gamakay` command for scripts, profiles and CI. |
+| **GUI + CLI** | An iced app for interactive work; a `lk67ctl` command for scripts, profiles and CI. |
 
 ![The lighting tab: the board's live preview, its controls, the backlight colour wheel, and the underglow panel with a wheel of its own](docs/images/lighting.png)
 
 ## Install
 
 Grab the package for your distribution from the
-[latest release](https://github.com/AessemOps/GamakayLinux/releases), or build
+[latest release](https://github.com/AessemOps/lk67ctl/releases), or build
 them yourself (see [docs/packaging.md](docs/packaging.md)):
 
 | Distribution | Package |
 |---|---|
-| Arch / CachyOS | `gamakaylinux-<ver>-1-<arch>.pkg.tar.zst` |
-| Debian / Ubuntu | `gamakaylinux_<ver>_amd64.deb` |
-| Fedora / RHEL | `gamakaylinux-<ver>-1.x86_64.rpm` |
-| Anything else | `GamakayLinux-<ver>-x86_64.AppImage` |
+| Arch / CachyOS | `lk67ctl-<ver>-1-<arch>.pkg.tar.zst` |
+| Debian / Ubuntu | `lk67ctl_<ver>_amd64.deb` |
+| Fedora / RHEL | `lk67ctl-<ver>-1.x86_64.rpm` |
+| Anything else | `lk67ctl-<ver>-x86_64.AppImage` |
 
 ```bash
-sudo pacman -U gamakaylinux-*.pkg.tar.zst
-sudo apt install ./gamakaylinux_*.deb
-sudo dnf install ./gamakaylinux-*.rpm
-chmod +x GamakayLinux-*.AppImage && ./GamakayLinux-*.AppImage
+sudo pacman -U lk67ctl-*.pkg.tar.zst
+sudo apt install ./lk67ctl_*.deb
+sudo dnf install ./lk67ctl-*.rpm
+chmod +x lk67ctl-*.AppImage && ./lk67ctl-*.AppImage
 ```
 
 The deb, rpm and Arch packages install a **udev rule** that lets you configure
 the keyboard as your normal user, and reload udev for you. An AppImage cannot
-touch `/etc`: install the rule it ships (`/usr/share/udev/70-gamakay.rules`
+touch `/etc`: install the rule it ships (`/usr/share/udev/70-lk67ctl.rules`
 inside the archive), or run the tools as root.
 
 ## Quick start
 
 ```bash
-gamakay list                     # every HID node, with the board marked
-gamakay info                     # model, firmware, active profile
-gamakay light set --color ff00aa --brightness 3 --mode wave
-gamakay light edge set --mode breathing --color 00d5ff   # the underglow
-gamakay keymap set --slot 9 --to Esc        # by slot
-gamakay keymap get --fn                     # the Fn layer
-gamakay keymap reset --yes                  # back to the board's defaults
-gamakay macro set 3 --steps 'H+@20, i+@30, i-@40' --repeat 1
-gamakay apply my-profile                    # a TOML profile of lighting + remaps
+lk67ctl list                     # every HID node, with the board marked
+lk67ctl info                     # model, firmware, active profile
+lk67ctl light set --color ff00aa --brightness 3 --mode wave
+lk67ctl light edge set --mode breathing --color 00d5ff   # the underglow
+lk67ctl keymap set --slot 9 --to Esc        # by slot
+lk67ctl keymap get --fn                     # the Fn layer
+lk67ctl keymap reset --yes                  # back to the board's defaults
+lk67ctl macro set 3 --steps 'H+@20, i+@30, i-@40' --repeat 1
+lk67ctl apply my-profile                    # a TOML profile of lighting + remaps
 ```
 
-`gamakay --dry-run …` prints the exact packets a command would send and sends
-no writes. `gamakay <command> --help` has the rest; `docs/protocol.md` documents
+`lk67ctl --dry-run …` prints the exact packets a command would send and sends
+no writes. `lk67ctl <command> --help` has the rest; `docs/protocol.md` documents
 the wire protocol itself.
 
-The GUI opens with `gamakay-gui` (or `gamakay-gui macros` to start on a tab).
+The GUI opens with `lk67-gui` (or `lk67-gui macros` to start on a tab).
 It shares one worker thread with the device, so a slow board never freezes the
 window, and it is a single window that does nothing when idle.
 
@@ -127,7 +132,7 @@ the tool identifies the board with a handshake, not by VID/PID — and
 - The board's firmware-owned Fn keys are painted red in the preview. The
   firmware ignores writes to those slots rather than the protocol refusing them,
   so remapping one has no effect.
-- If a board stops answering, `gamakay keymap reset --yes` sends the factory
+- If a board stops answering, `lk67ctl keymap reset --yes` sends the factory
   reset (`0x02`); the LK67 also resets with `Fn`+`Esc` held for about three
   seconds.
 
@@ -143,9 +148,9 @@ make package-arch
 
 | Path | What it is |
 |---|---|
-| `crates/gamakay-core/` | Protocol encode/decode, device table, safety guard, `Transport` trait |
-| `crates/gamakay-hidraw/` | The Linux hidraw layer: sysfs enumeration and the feature-report ioctls |
-| `crates/gamakay-cli/` · `crates/gamakay-gui/` | The two front-ends |
+| `crates/lk67-core/` | Protocol encode/decode, device table, safety guard, `Transport` trait |
+| `crates/lk67-hidraw/` | The Linux hidraw layer: sysfs enumeration and the feature-report ioctls |
+| `crates/lk67-cli/` · `crates/lk67-gui/` | The two front-ends |
 | `docs/protocol.md` | The command reference, byte layouts and what is safe |
 | `docs/packaging.md` · `docs/re-workflow.md` | How it is packaged; how the protocol was captured |
 | `.kilo/plans/` | The implementation plans, for anyone picking this up |

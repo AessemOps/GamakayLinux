@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=lk67ctl
+GenericName=Keyboard configurator
+Comment=Configure the GamaKay LK67 (lighting, keymap, macros)
+Exec=lk67-gui
+Icon=lk67ctl
+Terminal=false
+Categories=Settings;HardwareSettings;
+Keywords=keyboard;lk67ctl;lk67;rgb;

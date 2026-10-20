@@ -3,11 +3,11 @@
 #
 # One exchange per line: <opcode>: <64-byte reply, hex>. The report id (0) is
 # stripped. Each reply is preceded by a comment naming the state that was
-# written with `gamakay light edge set … --force` just before the read, so the
+# written with `lk67ctl light edge set … --force` just before the read, so the
 # file also pins the round-trip: what goes out comes back.
 #
 # Captured with the documented reader:
-#   cargo run -p gamakay-hidraw --example raw -- /dev/hidraw0 0x88
+#   cargo run -p lk67-hidraw --example raw -- /dev/hidraw0 0x88
 #
 # Layout, the same shape as the backlight's 0x87:
 #   [opcode, mode, speed, brightness, (option << 4) | flags, R, G, B, 0, …]
