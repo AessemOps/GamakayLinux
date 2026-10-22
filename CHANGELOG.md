@@ -4,6 +4,22 @@ All notable changes to this project. Version numbers are the tags; the workspace
 `Cargo.toml` version is the source of truth and `scripts/check-release-version.sh`
 keeps the PKGBUILD in step with it.
 
+## Unreleased
+
+### Added
+
+- **A read-only dump for boards we do not support yet.**
+  `scripts/dump-keyboard.sh` records a keyboard's HID identity, raw report
+  descriptor and the reply to every documented GET opcode, which is what adding
+  a board to `docs/protocol.md` starts from. It sends no SET opcode and redacts
+  serial numbers and unique IDs.
+
+### Fixed
+
+- The rename also rewrote the vendor's own identifiers in the
+  reverse-engineering notes and the device table (the download URL and the
+  `company` string). They are restored.
+
 ## 0.3.1 — 2026-10-20
 
 ### Fixed
