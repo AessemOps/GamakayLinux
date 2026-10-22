@@ -57,6 +57,33 @@ pub const GET_USERPIC: u8 = 0x8C;
 /// Factory reset. Needs ~4 s. Bare opcode.
 pub const SET_RESET: u8 = 0x02;
 
+// --- gen2 ------------------------------------------------------------------
+//
+// Documented from another project's firmware read-out (sharkfin, GPL-3.0);
+// every one of these still needs verification on the TK75HE V2 itself. The
+// numeric values collide with yc500's, so the family picks the meaning.
+// Shared with yc500: identify 0x8F, revision 0x80, LEDPARAM 0x87,
+// SLEDPARAM 0x88, macro get 0x8B, auto-OS 0x97, FN get 0x90.
+
+/// Select profile. GET returns the index in `reply[1]`, zero based.
+pub const SET_PROFILE_GEN2: u8 = 0x04;
+pub const GET_PROFILE_GEN2: u8 = 0x84;
+/// Options: decoded fields at reply bytes 1..4, meanings unestablished.
+pub const SET_KBOPTION_GEN2: u8 = 0x09;
+pub const GET_KBOPTION_GEN2: u8 = 0x89;
+/// Keymap: `[profile, 0xFF|slot, page, os]` on GET.
+pub const SET_KEYMATRIX_GEN2: u8 = 0x0A;
+pub const GET_KEYMATRIX_GEN2: u8 = 0x8A;
+/// Debounce, value at wire byte 1.
+pub const SET_DEBOUNCE_GEN2: u8 = 0x06;
+pub const GET_DEBOUNCE_GEN2: u8 = 0x86;
+/// Sleep timers, bytes 8..16 both ways.
+pub const SET_SLEEPTIME_GEN2: u8 = 0x11;
+pub const GET_SLEEPTIME_GEN2: u8 = 0x91;
+/// Report rate (gen2 only).
+pub const SET_REPORT_RATE_GEN2: u8 = 0x03;
+pub const GET_REPORT_RATE_GEN2: u8 = 0x83;
+
 // --- Blocked: destructive or bootloader ------------------------------------
 
 /// Flash-chip erase (both families), ~55 s. Also `0x2C` (yc500 display erase).

@@ -443,3 +443,45 @@ Bit7 form; byte 8 likewise for Bit8.
   the `layer` field. Extracted from the NSIS installer's `resources/app`
   (an Electron bundle) and `iot_driver.exe`; nothing is copied from it.
 - LK67 USB and HID descriptors — read from this machine in Phase 0.
+
+## The gen2 family (TK75HE V2, experimental)
+
+The TK75HE V2 (`3151:5030`, device id **3833**) speaks ROYUAN's **gen2**
+command set: the same 64-byte feature reports, report ID 0, the same checksums
+and the same `0x8F` handshake, but **different opcodes for several registers**.
+yc500's `SET_KEYMATRIX` (`0x09`) is gen2's `SET_KBOPTION`, yc500's
+`SET_KBOPTION` (`0x06`) is gen2's `SET_DEBOUNCE`, yc500's `SET_DEBOUNCE`
+(`0x11`) is gen2's `SET_SLEEPTIME`. A wrong-family write lands on a live
+register, so the family comes from the handshake record, never from the USB id.
+
+Support here is **experimental and read-only**: identity, firmware revision,
+profile and the lighting state can be read; every write is refused, `--force`
+included. The gen2 byte layouts come from another GPL-3.0 project's firmware
+read-out — `[FW]` in sharkfin's `docs/PROTOCOL.md`, see `CREDITS.md` — and
+nothing in this section has been round-tripped on the board yet.
+
+| command | yc500 (LK67) | gen2 |
+|---|---|---|
+| identify | `0x8F` | same |
+| revision | `0x80` | same |
+| LEDPARAM get/set | `0x87`/`0x07` | same |
+| SLEDPARAM get/set | `0x88`/`0x08` | same |
+| macro get/set | `0x8B`/`0x0B` | same |
+| auto-OS get/set | `0x97`/`0x17` | same |
+| profile get/set | `0x85`/`0x05` | `0x84`/`0x04` |
+| options get/set | `0x86`/`0x06` | `0x89`/`0x09` |
+| keymap get/set | `0x89`/`0x09` | `0x8A`/`0x0A` |
+| debounce get/set | `0x91`/`0x11` | `0x86`/`0x06` |
+| sleep get/set | `0x92`/`0x12` | `0x91`/`0x11` |
+| report rate get/set | — | `0x83`/`0x03` |
+| factory reset | `0x02` | `0x01` |
+
+The lighting payload is shared, so `light get` works unchanged: the same
+`[mode, speed, brightness, (option << 4) | flags, R, G, B, ck8]` shape, speed
+inverted on the wire, flags `7` fixed / `8` rainbow. The board has edge LEDs
+(`0x88`).
+
+Next steps, in order: read every command this build allows on hardware and
+record the replies; add the keymap read (`0x8A`, `[profile, 0xFF|slot, page,
+os]`, four profiles, per-OS layers); then one write at a time — write, read
+back, power-cycle, diff. `scripts/dump-keyboard.sh` collects the raw material.

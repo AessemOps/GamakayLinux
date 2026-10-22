@@ -13,6 +13,11 @@
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3151", ATTRS{idProduct}=="4003", ATTRS{bInterfaceNumber}=="00", TAG+="uaccess"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0461", ATTRS{idProduct}=="4002", ATTRS{bInterfaceNumber}=="00", TAG+="uaccess"
 
+# GamaKay TK75HE V2 — experimental, read-only support. Its settings collection
+# is usage page 0xFFFF / usage 2, and the interface number has not been
+# verified on hardware, so this grants the board's nodes by USB id only.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3151", ATTRS{idProduct}=="5030", TAG+="uaccess"
+
 # 2.4 GHz and Bluetooth are out of scope: the receiver declares no HID feature
 # report, so the protocol cannot be addressed over it, and Bluetooth was never
 # captured. No rule is needed for either. See docs/protocol.md.

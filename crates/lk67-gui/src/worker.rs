@@ -107,6 +107,8 @@ struct Worker {
     /// not write backlight, keymap or macro packets to a board it has not
     /// identified as an LK67 (`docs/protocol.md`, the device table).
     writes_allowed: bool,
+    /// The attached board's command set. gen2 boards are read-only for now.
+    family: lk67_core::device::Family,
     /// The last layer read from the board: `(profile, fn_layer, keymap)`. Binding
     /// a key is a read-modify-write of the whole layer, and a layer read is two
     /// 8-page passes, so keeping what was just read saves that on every bind.
@@ -121,6 +123,7 @@ impl Worker {
             fn_locked: &[],
             macros: Vec::new(),
             writes_allowed: false,
+            family: lk67_core::device::Family::Yc500,
             layer: None,
         }
     }
@@ -199,8 +202,12 @@ impl Worker {
             return;
         }
         self.read_backlight();
-        self.read_layer(false);
-        self.read_layer(true);
+        // The keymap read is yc500's; on gen2 the same opcode is the options
+        // register, so it is not read until that family is implemented.
+        if self.family == lk67_core::device::Family::Yc500 {
+            self.read_layer(false);
+            self.read_layer(true);
+        }
     }
 
     /// Make sure the board is open, re-enumerating when the cached node has
@@ -221,6 +228,7 @@ impl Worker {
         }
         self.layer = None;
         self.writes_allowed = false;
+        self.family = lk67_core::device::Family::Yc500;
         let Some(info) = lk67_hidraw::find_supported() else {
             self.emit(Event::Disconnected);
             return false;
@@ -264,7 +272,7 @@ impl Worker {
         }
         let outcome = match self.device.as_mut() {
             Some((dev, _)) => {
-                let mut s = Session::new(dev, Guard::new(false));
+                let mut s = Session::new(dev, Guard::for_family(false, self.family));
                 f(&mut s)
             }
             None => return None,
@@ -300,6 +308,9 @@ impl Worker {
         // "unknown" model, which is what a failed identify used to look like.
         let Some((id, rev, profile)) = self.with_session(|s| {
             let id = s.device_id()?;
+            if let Some(r) = lk67_core::device::by_id(id) {
+                s.set_family(r.family);
+            }
             let rev = s.revision().ok();
             let profile = s.profile().unwrap_or(0);
             Ok((id, rev, profile))
@@ -309,6 +320,9 @@ impl Worker {
             return;
         };
         let record = lk67_core::device::by_id(id);
+        self.family = record
+            .map(|r| r.family)
+            .unwrap_or(lk67_core::device::Family::Yc500);
         self.writes_allowed = record.is_some_and(|r| r.id == lk67_core::device::LK67.id);
         self.fn_locked = record.map(|r| r.fn_locked).unwrap_or(&[]);
         let model = record

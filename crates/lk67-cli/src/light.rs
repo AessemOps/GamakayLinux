@@ -83,6 +83,7 @@ fn show(cli: &Cli) -> Result<()> {
     let info = select_device(cli)?;
     let mut dev = HidrawDevice::open(&info.path)?;
     let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
+    crate::attach_family(&mut s)?;
     let led = s.led_param().context("reading backlight (0x87)")?;
     print_state("backlight", &led, false);
     if board_has_edge(&mut s) {

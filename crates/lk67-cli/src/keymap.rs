@@ -123,6 +123,7 @@ fn get(cli: &Cli, args: &GetArgs) -> Result<()> {
     let info = select_device(cli)?;
     let mut dev = HidrawDevice::open(&info.path)?;
     let mut s = Session::new(&mut dev, Guard::new(cli.dry_run));
+    crate::attach_family(&mut s)?;
     let (profile, layer) = with_profile(&mut s, args.profile, |s, profile| {
         let layer = s
             .read_layer(profile, args.fn_layer)

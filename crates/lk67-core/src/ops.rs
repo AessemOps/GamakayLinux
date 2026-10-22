@@ -98,9 +98,14 @@ impl Session<'_> {
         Ok((u16::from(reply[2]) << 8) | u16::from(reply[1]))
     }
 
-    /// `0x85`: active profile index, zero based, in `reply[1]`.
+    /// `0x85` yc500 / `0x84` gen2: active profile index, zero based, in
+    /// `reply[1]`.
     pub fn profile(&mut self) -> Result<u8> {
-        let reply = self.roundtrip(cmd::GET_PROFILE, &[], Checksum::Bit7)?;
+        let opcode = match self.guard().family {
+            device::Family::Yc500 => cmd::GET_PROFILE,
+            device::Family::Gen2 => cmd::GET_PROFILE_GEN2,
+        };
+        let reply = self.roundtrip(opcode, &[], Checksum::Bit7)?;
         Ok(reply[1])
     }
 
@@ -175,6 +180,21 @@ impl Session<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::device::Family;
+    use crate::guard::Guard;
+    use crate::packet::Checksum;
+    use crate::transport::MockTransport;
+
+    /// The profile register moves between families; reading it must follow the
+    /// board's own command set, or the tool reports yc500's options register.
+    #[test]
+    fn gen2_profile_reads_its_own_opcode() {
+        let mut mock = MockTransport::new();
+        mock.expect_payload(cmd::GET_PROFILE_GEN2, &[2], Checksum::Bit7);
+        let mut s = Session::new(&mut mock, Guard::for_family(false, Family::Gen2)).with_settle(0);
+        assert_eq!(s.profile().unwrap(), 2);
+        assert_eq!(mock.last_opcode(), Some(cmd::GET_PROFILE_GEN2));
+    }
 
     #[test]
     fn options_bitfield_maps() {

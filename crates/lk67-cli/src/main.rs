@@ -139,6 +139,9 @@ fn cmd_info(cli: &Cli) -> Result<()> {
 
     let id = session.device_id().context("identify (0x8F) failed")?;
     let record = device::by_id(id);
+    if let Some(r) = record {
+        session.set_family(r.family);
+    }
     let variant = device::is_lk67_variant(id);
 
     println!("node:        {}", info.path.display());
@@ -161,12 +164,23 @@ fn cmd_info(cli: &Cli) -> Result<()> {
                 r.name,
                 r.family.name()
             );
+            let (set_profile, get_profile) = match r.family {
+                device::Family::Yc500 => (lk67_core::cmd::SET_PROFILE, lk67_core::cmd::GET_PROFILE),
+                device::Family::Gen2 => (
+                    lk67_core::cmd::SET_PROFILE_GEN2,
+                    lk67_core::cmd::GET_PROFILE_GEN2,
+                ),
+            };
             println!(
-                "layers:      {} keymaps; the active one is selected with {:#04x}/{:#04x}",
-                r.layer,
-                lk67_core::cmd::SET_PROFILE,
-                lk67_core::cmd::GET_PROFILE
+                "layers:      {} keymaps; the active one is selected with {set_profile:#04x}/{get_profile:#04x}",
+                r.layer
             );
+            if r.experimental {
+                println!(
+                    "support:     experimental, read-only ({} command set); every write is refused",
+                    r.family.name()
+                );
+            }
         }
         None => println!("model:       unknown (no table record for id {id})"),
     }
@@ -191,7 +205,11 @@ fn cmd_info(cli: &Cli) -> Result<()> {
             led.mode, led.speed, led.brightness, led.rgb[0], led.rgb[1], led.rgb[2], led.flags
         );
     }
-    if let Ok(o) = session.options() {
+    // gen2 answers 0x89 with decoded fields whose meanings are not established,
+    // so there is nothing honest to print for it yet.
+    if record.map(|r| r.family) != Some(device::Family::Gen2)
+        && let Ok(o) = session.options()
+    {
         println!(
             "options:     win_lock={} mac_mode={} wasd_swap={} backlight_off={} \
              side_light_off={} keyboard_mode={} keyboard_lock={}",
@@ -230,23 +248,50 @@ fn cmd_info(cli: &Cli) -> Result<()> {
 /// board, and a board with mismatched firmware answers the handshake with a
 /// different id, so the decision is made on what the board says it is rather
 /// than on what it enumerates as. `--force` overrides, as documented.
-pub(crate) fn check_writable(cli: &Cli, s: &mut Session<'_>) -> Result<()> {
-    if cli.force {
-        return Ok(());
-    }
+/// Identify the attached board and key the session to its command set. The
+/// identify opcode is shared, so this happens once, before any family-specific
+/// command. Unknown ids stay on yc500; the callers refuse them separately.
+pub(crate) fn attach_family(s: &mut Session<'_>) -> Result<device::Family> {
     let id = s.device_id().context("identifying the board")?;
-    match device::by_id(id) {
-        Some(rec) if rec.id == device::LK67.id => Ok(()),
-        Some(rec) => bail!(
-            "the attached board reports id {id} ({}), not the LK67; refusing to write \
-             (pass --force to override)",
-            rec.display_name
-        ),
-        None => bail!(
+    let family = device::by_id(id)
+        .map(|r| r.family)
+        .unwrap_or(device::Family::Yc500);
+    s.set_family(family);
+    Ok(family)
+}
+
+pub(crate) fn check_writable(cli: &Cli, s: &mut Session<'_>) -> Result<()> {
+    let id = s.device_id().context("identifying the board")?;
+    let Some(rec) = device::by_id(id) else {
+        if cli.force {
+            return Ok(());
+        }
+        bail!(
             "the attached board reports unknown id {id}; refusing to write \
              (pass --force to override)"
-        ),
+        );
+    };
+    s.set_family(rec.family);
+    // Experimental support is read-only, and `--force` does not change that:
+    // the family's write opcodes mean different registers than the ones this
+    // project has verified, so a "forced" write is a wrong-register write.
+    if rec.experimental {
+        bail!(
+            "the attached board reports id {id} ({}): support for its {} command set is \
+             experimental and read-only, so nothing was written. See docs/protocol.md, \
+             \"The gen2 family\"",
+            rec.display_name,
+            rec.family.name()
+        );
     }
+    if rec.id == device::LK67.id || cli.force {
+        return Ok(());
+    }
+    bail!(
+        "the attached board reports id {id} ({}), not the LK67; refusing to write \
+         (pass --force to override)",
+        rec.display_name
+    )
 }
 
 pub(crate) fn select_device(cli: &Cli) -> Result<HidrawInfo> {

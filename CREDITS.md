@@ -16,7 +16,10 @@ this file records what was used and how. `Last reviewed: 2026-10-17 (iced 0.14 u
   ported file carries the upstream copyright header. Its fidelity for the LK67
   is unverified, since the upstream tool targets other boards; the real fix is
   to derive the animations from this board's own userpic/LED output.
-  `docs/protocol.md` no longer derives anything from sharkfin.
+  `docs/protocol.md` no longer derives anything from sharkfin for the LK67.
+  The **gen2** section and the TK75HE V2 record (`3151:5030`, id 3833, four
+  profiles, edge light) do come from sharkfin's `docs/PROTOCOL.md` and its
+  board page, and are marked `[FW]`/experimental there and here.
 - Reason GPL-compatible: sharkfin is GPL-3.0-or-later, as is this project.
 
 ### OpenRGB (LK67 fork)

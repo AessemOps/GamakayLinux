@@ -8,6 +8,12 @@ keeps the PKGBUILD in step with it.
 
 ### Added
 
+- **Experimental, read-only support for the GamaKay TK75HE V2.** The board
+  (`3151:5030`, id 3833) speaks the gen2 command set, whose opcodes collide with
+  the LK67's: `info` now identifies it and its family, and `light get` reads its
+  backlight and edge light. Every write is refused — `--force` included — until
+  the gen2 write semantics are verified on hardware (`docs/protocol.md`,
+  "The gen2 family").
 - **A read-only dump for boards we do not support yet.**
   `scripts/dump-keyboard.sh` records a keyboard's HID identity, raw report
   descriptor and the reply to every documented GET opcode, which is what adding

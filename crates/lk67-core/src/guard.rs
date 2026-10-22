@@ -11,6 +11,7 @@
 //! just reports the packet instead of sending it.
 
 use crate::cmd;
+use crate::device::Family;
 use crate::error::{Error, Result};
 use crate::packet::{Checksum, REPORT_LEN, packet, verify_checksum};
 
@@ -32,9 +33,10 @@ const BLOCKED: &[(u8, &str)] = &[
     (cmd::BOOT_INIT, "boot-mode image transfer"),
 ];
 
-/// The v1 command set. Reads are always safe; writes are the four feature
-/// groups (lighting, keymap, macros, settings) that the guard has reviewed.
-const ALLOWED: &[u8] = &[
+/// The yc500 command set (the LK67). Reads are always safe; writes are the
+/// four feature groups (lighting, keymap, macros, settings) that the guard has
+/// reviewed.
+const ALLOWED_YC500: &[u8] = &[
     // reads / identify
     cmd::GET_USB_VERSION,
     cmd::GET_REVISION,
@@ -66,15 +68,39 @@ const ALLOWED: &[u8] = &[
     cmd::SET_RESET,
 ];
 
-/// A guard with a dry-run flag. Cheap to copy.
+/// The gen2 command set, **reads only**. Opcodes collide with yc500's, so
+/// allowing a write here would mean sending it to a register this project has
+/// never verified: gen2's `SET_KBOPTION` is yc500's `SET_KEYMATRIX`. Only what
+/// `lk67ctl info` and `light get` need is permitted.
+const ALLOWED_GEN2: &[u8] = &[
+    cmd::GET_USB_VERSION,
+    cmd::GET_REVISION,
+    cmd::GET_LEDPARAM,
+    cmd::GET_SLEDPARAM,
+    cmd::GET_PROFILE_GEN2,
+];
+
+/// A guard with a dry-run flag and the command set to check against. Cheap to
+/// copy, so [`Session`](crate::transport::Session) can re-key it once the
+/// board has named its family.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Guard {
     pub dry_run: bool,
+    pub family: Family,
 }
 
 impl Guard {
     pub const fn new(dry_run: bool) -> Self {
-        Self { dry_run }
+        Self {
+            dry_run,
+            family: Family::Yc500,
+        }
+    }
+
+    /// A guard for a known family. The identify command itself is shared, so
+    /// callers build the default guard first and re-key it after the handshake.
+    pub const fn for_family(dry_run: bool, family: Family) -> Self {
+        Self { dry_run, family }
     }
 
     /// A block-list lookup, independent of the allow-list.
@@ -85,8 +111,16 @@ impl Guard {
             .map(|(_, reason)| *reason)
     }
 
-    pub fn allowed(opcode: u8) -> bool {
-        ALLOWED.contains(&opcode)
+    /// Whether the command set `family` permits `opcode`.
+    pub fn allowed_in(family: Family, opcode: u8) -> bool {
+        match family {
+            Family::Yc500 => ALLOWED_YC500.contains(&opcode),
+            Family::Gen2 => ALLOWED_GEN2.contains(&opcode),
+        }
+    }
+
+    pub fn allowed(&self, opcode: u8) -> bool {
+        Self::allowed_in(self.family, opcode)
     }
 
     /// Check the opcode against both lists, build the packet and confirm its
@@ -95,7 +129,7 @@ impl Guard {
         if let Some(reason) = Self::blocked(opcode) {
             return Err(Error::Blocked { opcode, reason });
         }
-        if !Self::allowed(opcode) {
+        if !self.allowed(opcode) {
             return Err(Error::NotAllowed { opcode });
         }
         let buf = packet(opcode, payload, mode)?;
@@ -124,6 +158,36 @@ mod tests {
             .build(0x42, &[], Checksum::Bit7)
             .unwrap_err();
         assert!(matches!(err, Error::NotAllowed { opcode: 0x42 }));
+    }
+
+    /// The gen2 board may be read, never written: its opcodes mean different
+    /// registers than yc500's.
+    #[test]
+    fn gen2_guard_is_read_only() {
+        let gen2 = Guard::for_family(false, Family::Gen2);
+        for op in [
+            cmd::GET_USB_VERSION,
+            cmd::GET_REVISION,
+            cmd::GET_LEDPARAM,
+            cmd::GET_SLEDPARAM,
+            cmd::GET_PROFILE_GEN2,
+        ] {
+            assert!(gen2.allowed(op), "0x{op:02X} must be readable");
+        }
+        for op in [
+            cmd::SET_LEDPARAM,
+            cmd::SET_SLEDPARAM,
+            cmd::SET_PROFILE_GEN2,
+            cmd::SET_KBOPTION_GEN2,
+            cmd::SET_KEYMATRIX_GEN2,
+            cmd::SET_DEBOUNCE_GEN2,
+            cmd::SET_RESET,
+        ] {
+            assert!(!gen2.allowed(op), "0x{op:02X} must stay refused");
+        }
+        // The yc500 keymatrix read is gen2's options read: not in the list.
+        assert!(!gen2.allowed(cmd::GET_KEYMATRIX));
+        assert!(Guard::new(false).allowed(cmd::GET_KEYMATRIX));
     }
 
     #[test]

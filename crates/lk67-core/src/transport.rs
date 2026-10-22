@@ -87,6 +87,13 @@ impl<'a> Session<'a> {
         self.guard
     }
 
+    /// Re-key the session (and its guard) once the board has named its family.
+    /// The identify request is shared by both families, so this happens after
+    /// the handshake, before any family-specific command.
+    pub fn set_family(&mut self, family: crate::device::Family) {
+        self.guard.family = family;
+    }
+
     /// Whether writes are suppressed (see [`Guard::dry_run`]). A caller that
     /// must not *read* state a withheld write would have changed needs this.
     pub fn is_dry_run(&self) -> bool {

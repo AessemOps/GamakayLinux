@@ -96,8 +96,8 @@ fn identify_revision_and_settings_decode() {
 fn every_read_command_stays_in_the_allow_list() {
     for (op, _) in load() {
         assert!(
-            Guard::allowed(op),
-            "read command 0x{op:02X} is missing from the allow-list"
+            Guard::new(false).allowed(op),
+            "read command 0x{op:02X} is missing from the yc500 allow-list"
         );
         assert!(Guard::blocked(op).is_none());
     }

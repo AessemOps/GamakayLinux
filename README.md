@@ -111,6 +111,7 @@ Two things surprise people, and both are handled:
 | Firmware | `3151:4003` (2026-10 update, id 290) and `0461:4002` (id 149) |
 | Transport | **USB cable only** |
 | OS | Linux with `hidraw` (any distribution; packages above) |
+| Experimental | GamaKay TK75HE V2 (`3151:5030`, id 3833, **gen2** family): `info` and `light get` work, every write is refused |
 
 **2.4 GHz and Bluetooth are out of scope.** They were investigated and dropped,
 with the measurements kept in [docs/protocol.md](docs/protocol.md) → "Scope: USB

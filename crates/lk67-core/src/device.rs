@@ -9,16 +9,21 @@
 
 /// The two colliding command sets. Opcodes overlap between them, so the
 /// family decides what every write means.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Family {
     /// The LK67's family (older, 0x8F identify, single-slot key writes).
+    #[default]
     Yc500,
+    /// Newer ROYUAN boards. Same transport and checksums, different opcode
+    /// meanings: yc500's keymatrix write (0x09) is this family's options write.
+    Gen2,
 }
 
 impl Family {
     pub const fn name(self) -> &'static str {
         match self {
             Family::Yc500 => "yc500",
+            Family::Gen2 => "gen2",
         }
     }
 }
@@ -58,6 +63,10 @@ pub struct DeviceRecord {
     /// The keys the firmware drives on the **Fn layer**, which therefore
     /// cannot be repurposed there. Slot indexes.
     pub fn_locked: &'static [u8],
+    /// Recognised, but only for reads: the family's write semantics have not
+    /// been verified on this board, so every write is refused, `--force`
+    /// included. A wrong-family write lands on a live register.
+    pub experimental: bool,
 }
 
 /// The GamaKay LK67, wired USB. The only board this project targets and tests.
@@ -94,6 +103,40 @@ pub const LK67: DeviceRecord = DeviceRecord {
         11, 41, 71, // Win, Space, Fn
         82, 83, 85, 86, 87, 88, 89, // Up Left Ins Del PgDn Down Right
     ],
+    experimental: false,
+};
+
+/// The GamaKay TK75HE V2, a 75% Hall-effect board (`3151:5030`, device id
+/// 3833). Experimental and **read-only**: it speaks the gen2 command set,
+/// whose opcodes collide with yc500's (gen2 `SET_KBOPTION` is yc500's
+/// `SET_KEYMATRIX`), so nothing may be written until each command is verified
+/// on hardware. Identity, firmware revision, profile and the lighting state
+/// are readable; see docs/protocol.md, "The gen2 family".
+///
+/// Data: sharkfin's GPL-3.0 registry and protocol notes (see CREDITS.md).
+pub const TK75HEV2: DeviceRecord = DeviceRecord {
+    id: 3833,
+    alt_ids: &[],
+    name: "tk75hev2",
+    display_name: "TK75HE V2",
+    company: "gamakay2",
+    vendor_id: 0x3151,
+    product_id: 0x5030,
+    // The gen2 settings collection, not the LK67's boot-keyboard one.
+    usage_page: 0xFFFF,
+    usage: 0x0002,
+    feature_report_byte_length: 65,
+    family: Family::Gen2,
+    layer: 4,
+    support_onboard: 2,
+    key_layout: "tk75hev2",
+    light_layout: "tk75hev2",
+    // The board has edge LEDs (sharkfin: "Edge light. This board has edge
+    // LEDs"); not yet driven from here.
+    side_light: true,
+    keys: 81,
+    fn_locked: &[],
+    experimental: true,
 };
 
 /// Profiles (onboard key layers) the LK67 stores. The keymap commands address
@@ -133,9 +176,10 @@ pub const YZ68: DeviceRecord = DeviceRecord {
     side_light: false,
     keys: 68,
     fn_locked: &[],
+    experimental: false,
 };
 
-pub const DEVICES: &[DeviceRecord] = &[LK67, YZ68];
+pub const DEVICES: &[DeviceRecord] = &[LK67, YZ68, TK75HEV2];
 
 /// The vendor-table id a board with mismatched (Banggood/original) firmware
 /// reports for the LK67. Seen in the wild as 71 instead of 149.
@@ -199,5 +243,16 @@ mod tests {
         assert!(!is_lk67ctl(0x1b1c, 0x1b2e)); // Corsair mouse, USB
         assert!(!is_lk67ctl(0x25a7, 0xfa17)); // the 2.4 GHz receiver (dropped)
         assert!(!is_lk67ctl(0x1234, 0x5678)); // anything else
+    }
+
+    /// The experimental board is recognised, but only for reads.
+    #[test]
+    fn tk75hev2_is_experimental_and_gen2() {
+        let rec = by_id(3833).expect("TK75HE V2 record");
+        assert_eq!(rec.display_name, "TK75HE V2");
+        assert_eq!(rec.family, Family::Gen2);
+        assert!(rec.experimental, "writes must stay refused");
+        assert_eq!(by_usb(0x3151, 0x5030).len(), 1);
+        assert!(is_lk67ctl(0x3151, 0x5030));
     }
 }
