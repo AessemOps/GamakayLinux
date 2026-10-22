@@ -30,7 +30,7 @@ descriptor if xxd is not enough.
 
 ## 1. Extract the vendor app
 
-The LK67 software downloads from <https://lk67ctl.com/pages/downloads>. It is
+The LK67 software downloads from <https://gamakay.com/pages/downloads>. It is
 an Electron build:
 
 ```bash
@@ -38,7 +38,7 @@ npx @electron/asar extract app.asar vendor/app
 ```
 
 Then read `vendor/app/main.js` / `index.js` for the device table (look for
-`yzw_lk67`, `featureReportByteLength`, `company: "lk67ctl2"`) and the packet
+`yzw_lk67`, `featureReportByteLength`, `company: "gamakay2"`) and the packet
 builders (header, opcode, checksum, page/chunk loops). Write only the decoded
 layout into `docs/protocol.md`.
 
@@ -93,3 +93,18 @@ lk67ctl info
 
 Without the rule, `lk67ctl info` reports a permission error; `lk67ctl list`
 still works, because it only reads sysfs.
+
+## 6. A board we do not drive yet
+
+Ask the owner for a dump before guessing anything. `scripts/dump-keyboard.sh`
+(read-only) writes a directory with the interface identity, the raw report
+descriptor and the board's reply to every documented app-mode GET opcode; the
+owner attaches it to an issue. Treat it as the section-3 material — a reply is
+not evidence that a feature exists — and ask for a `capture-usb.sh` capture
+next.
+
+The script sends only GET opcodes (`0x80..=0x9F` by default, `--full` for
+`0x80..=0xFF`) and never a SET, so it cannot change a setting on an unknown
+board. Serial numbers and unique IDs are redacted; the report descriptor and
+the replies are kept verbatim, so the owner should read the files before
+publishing them.

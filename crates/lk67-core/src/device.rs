@@ -68,7 +68,7 @@ pub const LK67: DeviceRecord = DeviceRecord {
     alt_ids: &[290],
     name: "yzw_lk67",
     display_name: "LK67",
-    company: "lk67ctl2",
+    company: "gamakay2",
     vendor_id: 0x3151,
     product_id: 0x4003,
     usage_page: 0x0001,

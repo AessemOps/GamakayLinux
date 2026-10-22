@@ -122,6 +122,13 @@ Other boards that share these USB ids are refused before anything is written —
 the tool identifies the board with a handshake, not by VID/PID — and
 `--force` overrides that when you know better.
 
+**Want another board supported?** Run `scripts/dump-keyboard.sh` with it
+plugged in and attach the directory it writes to an issue. It is read-only —
+only GET requests are sent — and serial numbers are redacted. It records the
+interface identity, the raw report descriptor, and the board's reply to every
+documented app-mode GET opcode, which is what adding a board to
+`docs/protocol.md` starts from.
+
 ## Safety
 
 - Every write passes a guard holding a default-deny **allow-list** of the
